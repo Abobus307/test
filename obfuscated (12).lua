@@ -74,7 +74,7 @@ end
 local function LoadSettings()
     if readfile and isfile then
         if isfile(SETTINGS_FILE) then
-            pcall(function()
+            local success, result = pcall(function()
                 local data = readfile(SETTINGS_FILE)
                 local loaded = HttpService:JSONDecode(data)
                 for key, value in pairs(loaded) do
@@ -85,6 +85,7 @@ local function LoadSettings()
                 DebugLog("Settings loaded successfully")
                 return true
             end)
+            return success
         end
     end
     return false
@@ -197,7 +198,8 @@ local function ShowSettingsLoadDialog()
     noCorner.CornerRadius = UDim.new(0, 6)
     noCorner.Parent = noButton
     
-    dialogGui.Parent = game.CoreGui
+    -- Parent to CoreGui immediately
+    dialogGui.Parent = game:GetService("CoreGui")
     
     -- Button events
     yesButton.MouseButton1Click:Connect(function()
@@ -217,7 +219,9 @@ local function ShowSettingsLoadDialog()
             countdownConnection:Disconnect()
             autoAccept = true
             dialogResult = true
-            dialogGui:Destroy()
+            if dialogGui and dialogGui.Parent then
+                dialogGui:Destroy()
+            end
         else
             countdown = countdown - 0.1
             timerText.Text = "Auto-accept in: " .. math.ceil(countdown) .. " seconds"
@@ -225,9 +229,9 @@ local function ShowSettingsLoadDialog()
     end)
     
     -- Wait for dialog result
-    while dialogGui.Parent do
+    repeat
         task.wait(0.1)
-    end
+    until dialogResult ~= nil or not dialogGui.Parent
     
     if autoAccept then
         Notify("Settings", "Auto-loading previous settings... ⏰", 3)
@@ -238,7 +242,9 @@ end
 
 -- Функция загрузки настроек с подтверждением
 local function LoadSettingsWithConfirmation()
-    if LoadSettings() then
+    local settingsLoaded = LoadSettings()
+    
+    if settingsLoaded then
         -- Show confirmation dialog for AutoFarm and Map settings
         local loadSettings = ShowSettingsLoadDialog()
         
@@ -257,6 +263,7 @@ local function LoadSettingsWithConfirmation()
     else
         -- Create default settings file if it doesn't exist
         SaveSettings()
+        Notify("Settings", "Default settings created ⚙️", 3)
         return false
     end
 end
@@ -333,7 +340,10 @@ DebugLog("Screen Size: " .. SCREEN_WIDTH .. "x" .. SCREEN_HEIGHT)
 DebugLog("UI Scale: " .. UI_SCALE)
 
 -- Загружаем настройки с подтверждением при запуске
-LoadSettingsWithConfirmation()
+spawn(function()
+    wait(1) -- Даем время игре полностью загрузиться
+    LoadSettingsWithConfirmation()
+end)
 
 -- ---------- ADAPTIVE BEAUTIFUL UI FOR PC AND MOBILE ----------
 local function createBeautifulGui()
