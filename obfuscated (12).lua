@@ -558,7 +558,79 @@ local function createBeautifulGui()
     titleLabel.Parent = titleBar
 
     -- Minimize / close
-    local closeBut        toggleButton.Size = UDim2.new(0, IS_MOBILE and 34 or 28, 0, IS_MOBILE and 34 or 28)
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, IS_MOBILE and 50 or 38, 0, IS_MOBILE and 40 or 34)
+    closeButton.Position = UDim2.new(1, -60, 0.5, IS_MOBILE and -20 or -17)
+    closeButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    closeButton.Text = "−"
+    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.TextSize = IS_MOBILE and 26 or 22
+    closeButton.ZIndex = 3
+    closeButton.Parent = titleBar
+
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, IS_MOBILE and 12 or 10)
+    closeCorner.Parent = closeButton
+
+    -- Content area
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(1, -30, 1, -80)
+    contentFrame.Position = UDim2.new(0, 15, 0, 70)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.ZIndex = 1
+    contentFrame.Parent = mainFrame
+
+    -- Scrolling frame for content
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Size = UDim2.new(1, 0, 1, 0)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, IS_MOBILE and 1400 or 1200)
+    scrollFrame.ScrollBarThickness = IS_MOBILE and 12 or 8
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(110, 110, 165)
+    scrollFrame.ZIndex = 1
+    scrollFrame.Parent = contentFrame
+
+    local mainLayout = Instance.new("UIListLayout")
+    mainLayout.Padding = UDim.new(0, IS_MOBILE and 16 or 12)
+    mainLayout.Parent = scrollFrame
+
+    -- Helper functions for elements
+    local function createLabel(text, sizeY)
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, sizeY or (IS_MOBILE and 32 or 26))
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.TextColor3 = Color3.fromRGB(230, 230, 250)
+        label.Font = Enum.Font.Gotham
+        label.TextSize = IS_MOBILE and FONT_SIZE_MEDIUM or 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.TextWrapped = true
+        label.ZIndex = 1
+        return label
+    end
+
+    local function createToggle(name, default, callback)
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(1, 0, 0, IS_MOBILE and 50 or 40)
+        container.BackgroundTransparency = 1
+        container.ZIndex = 1
+
+        local label = createLabel(name, IS_MOBILE and 36 or 28)
+        label.Size = UDim2.new(0.68, 0, 0, IS_MOBILE and 36 or 28)
+        label.Parent = container
+
+        local toggleFrame = Instance.new("Frame")
+        toggleFrame.Size = UDim2.new(0, IS_MOBILE and 70 or 58, 0, IS_MOBILE and 38 or 30)
+        toggleFrame.Position = UDim2.new(1, IS_MOBILE and -80 or -68, 0.5, IS_MOBILE and -19 or -15)
+        toggleFrame.BackgroundColor3 = default and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(80, 80, 80)
+        toggleFrame.BorderSizePixel = 0
+        toggleFrame.ZIndex = 1
+        toggleFrame.Parent = container
+        local toggleCorner = Instance.new("UICorner"); toggleCorner.CornerRadius = UDim.new(0, IS_MOBILE and 20 or 16); toggleCorner.Parent = toggleFrame
+
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Size = UDim2.new(0, IS_MOBILE and 34 or 28, 0, IS_MOBILE and 34 or 28)
         toggleButton.Position = default and UDim2.new(1, IS_MOBILE and -34 or -28, 0, IS_MOBILE and 2 or 0) or UDim2.new(0, 0, 0, IS_MOBILE and 2 or 0)
         toggleButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         toggleButton.Text = ""
@@ -579,7 +651,7 @@ local function createBeautifulGui()
             buttonTween:Play(); frameTween:Play()
             if callback then 
                 callback(default)
-                SaveSettings() -- Сохраняем настройки при изменении
+                SaveSettings()
             end
         end)
 
@@ -671,7 +743,7 @@ local function createBeautifulGui()
                     dropdownButton.Text = option
                     if callback then 
                         callback(option)
-                        SaveSettings() -- Сохраняем настройки при изменении
+                        SaveSettings()
                     end
                     closeDropdown()
                 end)
@@ -763,7 +835,7 @@ local function createBeautifulGui()
             label.Text = name .. ": " .. math.floor(value)
             if callback then 
                 callback(value)
-                SaveSettings() -- Сохраняем настройки при изменении
+                SaveSettings()
             end
         end
 
@@ -815,7 +887,7 @@ local function createBeautifulGui()
         deviceInfo.Font = Enum.Font.GothamBold
         deviceInfo.Parent = mobileContent
 
-        elements.workingLabel = createLabel("Working: 🔴", 32)
+        elements.workingLabel = createLabel("Status: 🔴 Inactive", 32)
         elements.workingLabel.Parent = mobileContent
 
         elements.moneyLabel = createLabel("Money: 0 💰", 28)
@@ -842,7 +914,7 @@ local function createBeautifulGui()
         performanceLabel.Font = Enum.Font.GothamBold
         performanceLabel.Parent = mobileContent
 
-        elements.perfLabel = createLabel("Performance: " .. tostring(FPS) .. " FPS", 28)
+        elements.perfLabel = createLabel("FPS: " .. tostring(FPS), 28)
         elements.perfLabel.Parent = mobileContent
 
         local riskLabel = createLabel("Risk Assessment", 30)
@@ -915,7 +987,7 @@ local function createBeautifulGui()
         deviceInfo.Font = Enum.Font.GothamBold
         deviceInfo.Parent = pcContent
 
-        elements.workingLabel = createLabel("Working: 🔴", 26)
+        elements.workingLabel = createLabel("Status: 🔴 Inactive", 26)
         elements.workingLabel.Parent = pcContent
 
         elements.moneyLabel = createLabel("Money: 0 💰", 22)
@@ -942,7 +1014,7 @@ local function createBeautifulGui()
         performanceLabel.Font = Enum.Font.GothamBold
         performanceLabel.Parent = pcContent
 
-        elements.perfLabel = createLabel("Performance: " .. tostring(FPS) .. " FPS", 22)
+        elements.perfLabel = createLabel("FPS: " .. tostring(FPS), 22)
         elements.perfLabel.Parent = pcContent
 
         local riskLabel = createLabel("Risk Assessment", 24)
@@ -1168,7 +1240,7 @@ local function startUIUpdateLoop(UI)
             safeUpdateLabel("queueLabel", "Queue: " .. queueText)
             
             -- Обновление производительности
-            safeUpdateLabel("perfLabel", "Performance: " .. tostring(FPS) .. " FPS")
+            safeUpdateLabel("perfLabel", "FPS: " .. tostring(FPS))
             
             -- Обновление валюты каждые 2 секунды
             if tick() - lastCurrencyUpdate > 2 then
@@ -1203,11 +1275,31 @@ local function startUIUpdateLoop(UI)
             safeUpdateLabel("banRiskLabel", "Ban Risk: " .. banRisk)
             
             -- Обновление статуса работы
-            local workingStatus = SETTINGS.AutoFarmEnabled and "🟢" or "🔴"
+            local workingStatus = SETTINGS.AutoFarmEnabled and "🟢 Active" or "🔴 Inactive"
             if SETTINGS.AutoFarmPaused then
-                workingStatus = "🟡"
+                workingStatus = "🟡 Paused"
             end
-            safeUpdateLabel("workingLabel", "Working: " .. workingStatus)
+            safeUpdateLabel("workingLabel", "Status: " .. workingStatus)
+            
+            -- Обновление статуса автофарма
+            local autofarmStatus = "Idle"
+            if SETTINGS.AutoFarmEnabled and not SETTINGS.AutoFarmPaused then
+                local inLobby = Workspace:FindFirstChild("Lobby") ~= nil
+                local inGame = Workspace:FindFirstChild("Map") ~= nil
+                
+                if inLobby then
+                    autofarmStatus = "In Lobby 🏠"
+                elseif inGame then
+                    autofarmStatus = "In Game 🎮"
+                else
+                    autofarmStatus = "Searching 🔍"
+                end
+            elseif SETTINGS.AutoFarmPaused then
+                autofarmStatus = "Paused ⏸️"
+            else
+                autofarmStatus = "Disabled 🔴"
+            end
+            safeUpdateLabel("autofarmStatusLabel", "AutoFarm: " .. autofarmStatus)
             
             -- Обновление кэшей ReplicatedStorage
             RefreshReplicatedStorageCaches()
@@ -1475,35 +1567,18 @@ task.spawn(function()
                 
                 if currentMap and not AutoState.RoundHandled then
                     DebugLog("State: In Game - Running AutoFarm")
-                    if UI and UI.Elements and UI.Elements.autofarmStatusLabel then
-                        UI.Elements.autofarmStatusLabel.Text = "AutoFarm: In Game 🎮"
-                    end
                     RunAutoFarmOnce()
                 elseif Workspace:FindFirstChild("Lobby") then
                     AutoState.RoundHandled = false
                     DebugLog("State: In Lobby - Joining Game")
-                    if UI and UI.Elements and UI.Elements.autofarmStatusLabel then
-                        UI.Elements.autofarmStatusLabel.Text = "AutoFarm: In Lobby 🏠"
-                    end
                     RunLobbyRoutine()
                 else
                     DebugLog("State: Loading/Other")
-                    if UI and UI.Elements and UI.Elements.autofarmStatusLabel then
-                        UI.Elements.autofarmStatusLabel.Text = "AutoFarm: Loading ⏳"
-                    end
                     wait(2)
                 end
             end)
             
             TaskRunning = false
-        else
-            if UI and UI.Elements and UI.Elements.autofarmStatusLabel then
-                if SETTINGS.AutoFarmPaused then
-                    UI.Elements.autofarmStatusLabel.Text = "AutoFarm: Paused ⏸️"
-                elseif not SETTINGS.AutoFarmEnabled then
-                    UI.Elements.autofarmStatusLabel.Text = "AutoFarm: Disabled 🔴"
-                end
-            end
         end
         wait(0.5)
     end
@@ -1553,7 +1628,15 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- ========== СОЗДАНИЕ И ЗАПУСК GUI ==========
-DebugLog("Starting GUI creation...")
+print("🚀 Starting GUI creation...")
+
+-- Загружаем настройки с подтверждением ПЕРЕД созданием GUI
+spawn(function()
+    wait(3) -- Даем больше времени игре загрузиться
+    print("🔄 Starting settings load process...")
+    LoadSettingsWithConfirmation()
+end)
+
 local success, UI = pcall(function()
     return createBeautifulGui()
 end)
@@ -1561,7 +1644,7 @@ end)
 if success and UI then
     local deviceType = UI.IsMobile and (IS_TABLET and "Tablet" or "Mobile") or "PC"
     Notify(NAME, deviceType .. " GUI loaded - Tap the button to open!", 3)
-    DebugLog("GUI created successfully, starting update loop")
+    print("✅ GUI created successfully, starting update loop")
     
     pcall(function()
         startUIUpdateLoop(UI)
@@ -1572,5 +1655,5 @@ else
     Notify("Error", "Failed to load GUI: " .. errorMsg, 5)
 end
 
-DebugLog("Adaptive script fully loaded for " .. (IS_MOBILE and (IS_TABLET and "tablet" or "mobile") or "PC"))
+print("🎯 Adaptive script fully loaded for " .. (IS_MOBILE and (IS_TABLET and "tablet" or "mobile") or "PC"))
 RefreshReplicatedStorageCaches()
