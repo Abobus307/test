@@ -66,7 +66,7 @@ local function SaveSettings()
         pcall(function()
             local data = HttpService:JSONEncode(SETTINGS)
             writefile(SETTINGS_FILE, data)
-            DebugLog("Settings saved successfully")
+            print("✅ Settings saved successfully")
         end)
     end
 end
@@ -82,17 +82,26 @@ local function LoadSettings()
                         SETTINGS[key] = value
                     end
                 end
-                DebugLog("Settings loaded successfully")
+                print("✅ Settings loaded successfully")
                 return true
             end)
+            if not success then
+                print("❌ Error loading settings: " .. tostring(result))
+            end
             return success
+        else
+            print("📁 Settings file doesn't exist")
         end
+    else
+        print("❌ File functions not available")
     end
     return false
 end
 
 -- Функция показа диалога загрузки настроек
 local function ShowSettingsLoadDialog()
+    print("🔄 Showing settings load dialog...")
+    
     local dialogResult = nil
     local countdown = 20
     local autoAccept = false
@@ -111,8 +120,8 @@ local function ShowSettingsLoadDialog()
     background.Parent = dialogGui
     
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 200)
-    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -100)
+    mainFrame.Size = UDim2.new(0, 400, 0, 220)
+    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -110)
     mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
     mainFrame.BorderSizePixel = 0
     mainFrame.ZIndex = 101
@@ -139,7 +148,7 @@ local function ShowSettingsLoadDialog()
     title.Parent = mainFrame
     
     local message = Instance.new("TextLabel")
-    message.Size = UDim2.new(1, -40, 0, 60)
+    message.Size = UDim2.new(1, -40, 0, 80)
     message.Position = UDim2.new(0, 20, 0, 50)
     message.BackgroundTransparency = 1
     message.Text = "Would you like to load your previous AutoFarm settings?\n\nMap: " .. (SETTINGS.SelectedMap or "Unknown") .. "\nMode: " .. (SETTINGS.AutofarmMode or "Unknown")
@@ -152,7 +161,7 @@ local function ShowSettingsLoadDialog()
     
     local timerText = Instance.new("TextLabel")
     timerText.Size = UDim2.new(1, 0, 0, 20)
-    timerText.Position = UDim2.new(0, 0, 0, 120)
+    timerText.Position = UDim2.new(0, 0, 0, 140)
     timerText.BackgroundTransparency = 1
     timerText.Text = "Auto-accept in: 20 seconds"
     timerText.TextColor3 = Color3.fromRGB(255, 255, 0)
@@ -199,15 +208,20 @@ local function ShowSettingsLoadDialog()
     noCorner.Parent = noButton
     
     -- Parent to CoreGui immediately
-    dialogGui.Parent = game:GetService("CoreGui")
+    pcall(function()
+        dialogGui.Parent = game:GetService("CoreGui")
+        print("✅ Dialog parented to CoreGui")
+    end)
     
     -- Button events
     yesButton.MouseButton1Click:Connect(function()
+        print("✅ User clicked YES")
         dialogResult = true
         dialogGui:Destroy()
     end)
     
     noButton.MouseButton1Click:Connect(function()
+        print("❌ User clicked NO")
         dialogResult = false
         dialogGui:Destroy()
     end)
@@ -219,6 +233,7 @@ local function ShowSettingsLoadDialog()
             countdownConnection:Disconnect()
             autoAccept = true
             dialogResult = true
+            print("⏰ Auto-accept triggered")
             if dialogGui and dialogGui.Parent then
                 dialogGui:Destroy()
             end
@@ -229,27 +244,45 @@ local function ShowSettingsLoadDialog()
     end)
     
     -- Wait for dialog result
-    repeat
-        task.wait(0.1)
-    until dialogResult ~= nil or not dialogGui.Parent
+    local startWait = tick()
+    while tick() - startWait < 30 do -- 30 second timeout
+        if dialogResult ~= nil then break end
+        if not dialogGui.Parent then break end
+        wait(0.1)
+    end
+    
+    if dialogResult == nil then
+        print("⚠️ Dialog timeout, defaulting to YES")
+        dialogResult = true
+        autoAccept = true
+        if dialogGui and dialogGui.Parent then
+            dialogGui:Destroy()
+        end
+    end
     
     if autoAccept then
         Notify("Settings", "Auto-loading previous settings... ⏰", 3)
     end
     
+    print("🔚 Dialog result: " .. tostring(dialogResult))
     return dialogResult == true
 end
 
 -- Функция загрузки настроек с подтверждением
 local function LoadSettingsWithConfirmation()
+    print("🔄 Starting settings load with confirmation...")
+    
     local settingsLoaded = LoadSettings()
+    print("Settings loaded: " .. tostring(settingsLoaded))
     
     if settingsLoaded then
         -- Show confirmation dialog for AutoFarm and Map settings
+        print("📢 Showing confirmation dialog...")
         local loadSettings = ShowSettingsLoadDialog()
         
         if loadSettings then
             Notify("Settings", "Previous settings loaded! ✅", 3)
+            print("✅ User accepted settings load")
             return true
         else
             -- Reset to defaults if user chooses no
@@ -258,12 +291,14 @@ local function LoadSettingsWithConfirmation()
             SETTINGS.AutofarmMode = "Legal (Slow)"
             SETTINGS.SelectedMap = "Cursed Cathedral"
             Notify("Settings", "Using default settings ⚙️", 3)
+            print("❌ User rejected settings load, using defaults")
             return false
         end
     else
         -- Create default settings file if it doesn't exist
         SaveSettings()
         Notify("Settings", "Default settings created ⚙️", 3)
+        print("📝 Created default settings file")
         return false
     end
 end
@@ -338,12 +373,6 @@ end
 DebugLog("Device Detection: Mobile=" .. tostring(IS_MOBILE) .. ", Tablet=" .. tostring(IS_TABLET))
 DebugLog("Screen Size: " .. SCREEN_WIDTH .. "x" .. SCREEN_HEIGHT)
 DebugLog("UI Scale: " .. UI_SCALE)
-
--- Загружаем настройки с подтверждением при запуске
-spawn(function()
-    wait(1) -- Даем время игре полностью загрузиться
-    LoadSettingsWithConfirmation()
-end)
 
 -- ---------- ADAPTIVE BEAUTIFUL UI FOR PC AND MOBILE ----------
 local function createBeautifulGui()
@@ -529,79 +558,7 @@ local function createBeautifulGui()
     titleLabel.Parent = titleBar
 
     -- Minimize / close
-    local closeButton = Instance.new("TextButton")
-    closeButton.Size = UDim2.new(0, IS_MOBILE and 50 or 38, 0, IS_MOBILE and 40 or 34)
-    closeButton.Position = UDim2.new(1, -60, 0.5, IS_MOBILE and -20 or -17)
-    closeButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-    closeButton.Text = "−"
-    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closeButton.Font = Enum.Font.GothamBold
-    closeButton.TextSize = IS_MOBILE and 26 or 22
-    closeButton.ZIndex = 3
-    closeButton.Parent = titleBar
-
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, IS_MOBILE and 12 or 10)
-    closeCorner.Parent = closeButton
-
-    -- Content area
-    local contentFrame = Instance.new("Frame")
-    contentFrame.Size = UDim2.new(1, -30, 1, -80)
-    contentFrame.Position = UDim2.new(0, 15, 0, 70)
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.ZIndex = 1
-    contentFrame.Parent = mainFrame
-
-    -- Scrolling frame for content
-    local scrollFrame = Instance.new("ScrollingFrame")
-    scrollFrame.Size = UDim2.new(1, 0, 1, 0)
-    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, IS_MOBILE and 1400 or 1200)
-    scrollFrame.ScrollBarThickness = IS_MOBILE and 12 or 8
-    scrollFrame.BackgroundTransparency = 1
-    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(110, 110, 165)
-    scrollFrame.ZIndex = 1
-    scrollFrame.Parent = contentFrame
-
-    local mainLayout = Instance.new("UIListLayout")
-    mainLayout.Padding = UDim.new(0, IS_MOBILE and 16 or 12)
-    mainLayout.Parent = scrollFrame
-
-    -- Helper functions for elements
-    local function createLabel(text, sizeY)
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 0, sizeY or (IS_MOBILE and 32 or 26))
-        label.BackgroundTransparency = 1
-        label.Text = text
-        label.TextColor3 = Color3.fromRGB(230, 230, 250)
-        label.Font = Enum.Font.Gotham
-        label.TextSize = IS_MOBILE and FONT_SIZE_MEDIUM or 14
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.TextWrapped = true
-        label.ZIndex = 1
-        return label
-    end
-
-    local function createToggle(name, default, callback)
-        local container = Instance.new("Frame")
-        container.Size = UDim2.new(1, 0, 0, IS_MOBILE and 50 or 40)
-        container.BackgroundTransparency = 1
-        container.ZIndex = 1
-
-        local label = createLabel(name, IS_MOBILE and 36 or 28)
-        label.Size = UDim2.new(0.68, 0, 0, IS_MOBILE and 36 or 28)
-        label.Parent = container
-
-        local toggleFrame = Instance.new("Frame")
-        toggleFrame.Size = UDim2.new(0, IS_MOBILE and 70 or 58, 0, IS_MOBILE and 38 or 30)
-        toggleFrame.Position = UDim2.new(1, IS_MOBILE and -80 or -68, 0.5, IS_MOBILE and -19 or -15)
-        toggleFrame.BackgroundColor3 = default and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(80, 80, 80)
-        toggleFrame.BorderSizePixel = 0
-        toggleFrame.ZIndex = 1
-        toggleFrame.Parent = container
-        local toggleCorner = Instance.new("UICorner"); toggleCorner.CornerRadius = UDim.new(0, IS_MOBILE and 20 or 16); toggleCorner.Parent = toggleFrame
-
-        local toggleButton = Instance.new("TextButton")
-        toggleButton.Size = UDim2.new(0, IS_MOBILE and 34 or 28, 0, IS_MOBILE and 34 or 28)
+    local closeBut        toggleButton.Size = UDim2.new(0, IS_MOBILE and 34 or 28, 0, IS_MOBILE and 34 or 28)
         toggleButton.Position = default and UDim2.new(1, IS_MOBILE and -34 or -28, 0, IS_MOBILE and 2 or 0) or UDim2.new(0, 0, 0, IS_MOBILE and 2 or 0)
         toggleButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         toggleButton.Text = ""
