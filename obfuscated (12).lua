@@ -59,6 +59,10 @@ local DROPDOWN_STATE = {
     CurrentDropdown = nil
 }
 
+-- User input tracking
+local USER_INPUT_ACTIVE = false
+local LAST_USER_INPUT_TIME = 0
+
 -- ========== СИСТЕМА СОХРАНЕНИЯ И ЗАГРУЗКИ НАСТРОЕК ==========
 
 local function SaveSettings()
@@ -213,18 +217,23 @@ local function ShowSettingsLoadDialog()
         print("✅ Dialog parented to CoreGui")
     end)
     
-    -- Button events
-    yesButton.MouseButton1Click:Connect(function()
-        print("✅ User clicked YES")
-        dialogResult = true
-        dialogGui:Destroy()
-    end)
+    -- Button events - FIXED FOR MOBILE
+    local function handleButtonClick(button, resultValue)
+        local function onClick()
+            print("✅ User clicked " .. (resultValue and "YES" or "NO"))
+            dialogResult = resultValue
+            dialogGui:Destroy()
+        end
+        
+        if IS_MOBILE then
+            button.TouchTap:Connect(onClick)
+        else
+            button.MouseButton1Click:Connect(onClick)
+        end
+    end
     
-    noButton.MouseButton1Click:Connect(function()
-        print("❌ User clicked NO")
-        dialogResult = false
-        dialogGui:Destroy()
-    end)
+    handleButtonClick(yesButton, true)
+    handleButtonClick(noButton, false)
     
     -- Countdown timer
     local countdownConnection
@@ -374,6 +383,21 @@ DebugLog("Device Detection: Mobile=" .. tostring(IS_MOBILE) .. ", Tablet=" .. to
 DebugLog("Screen Size: " .. SCREEN_WIDTH .. "x" .. SCREEN_HEIGHT)
 DebugLog("UI Scale: " .. UI_SCALE)
 
+-- User input tracking
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed then
+        USER_INPUT_ACTIVE = true
+        LAST_USER_INPUT_TIME = tick()
+        
+        -- Reset user input active after 2 seconds of inactivity
+        delay(2, function()
+            if tick() - LAST_USER_INPUT_TIME >= 2 then
+                USER_INPUT_ACTIVE = false
+            end
+        end)
+    end
+end)
+
 -- ---------- ADAPTIVE BEAUTIFUL UI FOR PC AND MOBILE ----------
 local function createBeautifulGui()
     local playerGui = getPlayerGui()
@@ -404,12 +428,14 @@ local function createBeautifulGui()
     local FONT_SIZE_LARGE = math.floor(18 * FONT_SIZE_MULTIPLIER)
 
     -- Fullscreen dropdown overlay (larger on mobile)
-    local dropdownOverlay = Instance.new("Frame")
+    local dropdownOverlay = Instance.new("TextButton") -- CHANGED TO TextButton FOR MOBILE
     dropdownOverlay.Name = "DropdownOverlay"
     dropdownOverlay.Size = UDim2.new(1, 0, 1, 0)
     dropdownOverlay.Position = UDim2.new(0, 0, 0, 0)
     dropdownOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     dropdownOverlay.BackgroundTransparency = IS_MOBILE and 0.3 or 0.7
+    dropdownOverlay.Text = ""
+    dropdownOverlay.AutoButtonColor = false
     dropdownOverlay.Visible = false
     dropdownOverlay.ZIndex = 100
     dropdownOverlay.Parent = screenGui
@@ -639,7 +665,8 @@ local function createBeautifulGui()
         toggleButton.Parent = toggleFrame
         local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0,IS_MOBILE and 17 or 14); bcorner.Parent = toggleButton
 
-        toggleButton.MouseButton1Click:Connect(function()
+        -- FIXED INPUT HANDLING FOR MOBILE
+        local function handleToggleClick()
             if DROPDOWN_STATE.IsOpen then return end
             default = not default
             local buttonTween = TweenService:Create(toggleButton, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -653,7 +680,13 @@ local function createBeautifulGui()
                 callback(default)
                 SaveSettings()
             end
-        end)
+        end
+
+        if IS_MOBILE then
+            toggleButton.TouchTap:Connect(handleToggleClick)
+        else
+            toggleButton.MouseButton1Click:Connect(handleToggleClick)
+        end
 
         return {Container = container, Button = toggleButton, Frame = toggleFrame}
     end
@@ -700,7 +733,8 @@ local function createBeautifulGui()
         local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0,IS_MOBILE and 10 or 8); corner.Parent = dropdownButton
         local stroke = Instance.new("UIStroke"); stroke.Color = Color3.fromRGB(100,100,150); stroke.Thickness = 1; stroke.Parent = dropdownButton
 
-        dropdownButton.MouseButton1Click:Connect(function()
+        -- FIXED INPUT HANDLING FOR MOBILE
+        local function handleDropdownClick()
             if DROPDOWN_STATE.IsOpen then return end
             
             DROPDOWN_STATE.IsOpen = true
@@ -739,27 +773,36 @@ local function createBeautifulGui()
                 optionStroke.Thickness = 1
                 optionStroke.Parent = optionButton
 
-                optionButton.MouseButton1Click:Connect(function()
+                -- FIXED INPUT HANDLING FOR MOBILE
+                local function handleOptionClick()
                     dropdownButton.Text = option
                     if callback then 
                         callback(option)
                         SaveSettings()
                     end
                     closeDropdown()
-                end)
+                end
+
+                if IS_MOBILE then
+                    optionButton.TouchTap:Connect(handleOptionClick)
+                else
+                    optionButton.MouseButton1Click:Connect(handleOptionClick)
+                end
                 
-                -- Hover effects
-                optionButton.MouseEnter:Connect(function()
-                    TweenService:Create(optionButton, TweenInfo.new(0.15), {
-                        BackgroundColor3 = Color3.fromRGB(60, 60, 85)
-                    }):Play()
-                end)
-                
-                optionButton.MouseLeave:Connect(function()
-                    TweenService:Create(optionButton, TweenInfo.new(0.15), {
-                        BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-                    }):Play()
-                end)
+                -- Hover effects (PC only)
+                if not IS_MOBILE then
+                    optionButton.MouseEnter:Connect(function()
+                        TweenService:Create(optionButton, TweenInfo.new(0.15), {
+                            BackgroundColor3 = Color3.fromRGB(60, 60, 85)
+                        }):Play()
+                    end)
+                    
+                    optionButton.MouseLeave:Connect(function()
+                        TweenService:Create(optionButton, TweenInfo.new(0.15), {
+                            BackgroundColor3 = Color3.fromRGB(45, 45, 65)
+                        }):Play()
+                    end)
+                end
             end
             
             -- Update content size
@@ -777,7 +820,13 @@ local function createBeautifulGui()
                 Size = IS_MOBILE and UDim2.new(0.95, 0, 0.9, 0) or UDim2.new(0.8, 0, 0.8, 0)
             })
             openTween:Play()
-        end)
+        end
+
+        if IS_MOBILE then
+            dropdownButton.TouchTap:Connect(handleDropdownClick)
+        else
+            dropdownButton.MouseButton1Click:Connect(handleDropdownClick)
+        end
 
         return {Container = container, Button = dropdownButton}
     end
@@ -839,17 +888,29 @@ local function createBeautifulGui()
             end
         end
 
-        sliderButton.MouseButton1Down:Connect(function()
+        -- FIXED INPUT HANDLING FOR MOBILE
+        local function handleSliderStart()
             if DROPDOWN_STATE.IsOpen then return end
             local connection
             connection = RunService.Heartbeat:Connect(function()
-                local mousePos = UserInputService:GetMouseLocation()
-                local barPos = sliderBar.AbsolutePosition
-                local barSize = sliderBar.AbsoluteSize
-                local relativeX = (mousePos.X - barPos.X) / barSize.X
-                relativeX = math.clamp(relativeX, 0, 1)
-                local value = minVal + relativeX * (maxVal - minVal)
-                updateSlider(value)
+                local inputPos
+                if IS_MOBILE then
+                    local touchInputs = UserInputService:GetTouchInputs()
+                    if #touchInputs > 0 then
+                        inputPos = touchInputs[#touchInputs].Position
+                    end
+                else
+                    inputPos = UserInputService:GetMouseLocation()
+                end
+                
+                if inputPos then
+                    local barPos = sliderBar.AbsolutePosition
+                    local barSize = sliderBar.AbsoluteSize
+                    local relativeX = (inputPos.X - barPos.X) / barSize.X
+                    relativeX = math.clamp(relativeX, 0, 1)
+                    local value = minVal + relativeX * (maxVal - minVal)
+                    updateSlider(value)
+                end
             end)
 
             local endedConn
@@ -859,13 +920,27 @@ local function createBeautifulGui()
                     if endedConn then endedConn:Disconnect() end
                 end
             end)
-        end)
+        end
+
+        if IS_MOBILE then
+            sliderButton.TouchTap:Connect(handleSliderStart)
+        else
+            sliderButton.MouseButton1Down:Connect(handleSliderStart)
+        end
 
         return {Container = container, Label = label}
     end
 
-    -- Connect close button
-    closeDropdownButton.MouseButton1Click:Connect(closeDropdown)
+    -- Connect close button - FIXED FOR MOBILE
+    local function handleCloseDropdown()
+        closeDropdown()
+    end
+
+    if IS_MOBILE then
+        closeDropdownButton.TouchTap:Connect(handleCloseDropdown)
+    else
+        closeDropdownButton.MouseButton1Click:Connect(handleCloseDropdown)
+    end
 
     -- Fill content based on device type
     local elements = {}
@@ -1104,8 +1179,8 @@ local function createBeautifulGui()
         end)
     end
 
-    -- Show/Hide button with adaptive behavior
-    showHideButton.MouseButton1Click:Connect(function()
+    -- Show/Hide button with adaptive behavior - FIXED FOR MOBILE
+    local function handleShowHideClick()
         if not mainFrame.Visible and not DROPDOWN_STATE.IsOpen then
             mainFrame.Visible = true
             if IS_MOBILE then
@@ -1118,17 +1193,29 @@ local function createBeautifulGui()
             })
             openTween:Play()
         end
-    end)
+    end
 
-    -- Close/minimize
-    closeButton.MouseButton1Click:Connect(function()
+    if IS_MOBILE then
+        showHideButton.TouchTap:Connect(handleShowHideClick)
+    else
+        showHideButton.MouseButton1Click:Connect(handleShowHideClick)
+    end
+
+    -- Close/minimize - FIXED FOR MOBILE
+    local function handleCloseClick()
         if DROPDOWN_STATE.IsOpen then return end
         local closeTween = TweenService:Create(mainFrame, TweenInfo.new(0.28), {Size = UDim2.new(0, 0, 0, 0)})
         closeTween:Play()
         closeTween.Completed:Connect(function()
             mainFrame.Visible = false
         end)
-    end)
+    end
+
+    if IS_MOBILE then
+        closeButton.TouchTap:Connect(handleCloseClick)
+    else
+        closeButton.MouseButton1Click:Connect(handleCloseClick)
+    end
 
     -- Mobile: add touch gestures for better usability
     if IS_MOBILE then
@@ -1163,6 +1250,7 @@ local function startUIUpdateLoop(UI)
     
     local startTime = tick()
     local lastCurrencyUpdate = 0
+    local lastTimerUpdate = 0 -- Added for slower timer updates
     
     -- Кэшированные значения
     local cachedValues = {
@@ -1180,43 +1268,72 @@ local function startUIUpdateLoop(UI)
         end
     end
     
-    -- Функция для получения валюты
+    -- УЛУЧШЕННАЯ функция для получения валюты
     local function getCurrency()
         local money, candy = 0, 0
         
         pcall(function()
             local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
             if playerGui then
-                -- Попробуем разные возможные пути к интерфейсу игры
-                local mainGui = playerGui:FindFirstChild("MainGui") or playerGui:FindFirstChild("MainGUI")
-                if mainGui then
-                    local holder = mainGui:FindFirstChild("Holder") or mainGui:FindFirstChild("MainFrame")
-                    if holder then
-                        local top = holder:FindFirstChild("Top") or holder:FindFirstChild("Header")
-                        if top then
-                            local inner = top:FindFirstChild("Holder") or top:FindFirstChild("CurrencyFrame") or top
-                            
-                            -- Ищем деньги
-                            local coinsObj = inner:FindFirstChild("Coins") or inner:FindFirstChild("Money") or inner:FindFirstChild("Coin")
-                            if coinsObj then
-                                local amountLabel = coinsObj:FindFirstChild("Amount") or coinsObj:FindFirstChild("Text") or coinsObj:FindFirstChild("Value")
-                                if amountLabel and amountLabel:IsA("TextLabel") then
-                                    local moneyText = amountLabel.Text:gsub(",", ""):gsub("💰", ""):gsub("$", ""):gsub("%s+", "")
-                                    money = tonumber(moneyText) or 0
+                -- Поиск всех возможных мест где могут быть деньги и конфеты
+                local function findCurrencyValue(currencyNames)
+                    for _, name in ipairs(currencyNames) do
+                        -- Поиск в разных местах интерфейса
+                        local locations = {
+                            playerGui:FindFirstChild("MainGui"),
+                            playerGui:FindFirstChild("MainGUI"), 
+                            playerGui:FindFirstChild("GameUI"),
+                            playerGui:FindFirstChild("Interface")
+                        }
+                        
+                        for _, location in ipairs(locations) do
+                            if location then
+                                -- Рекурсивный поиск по всем потомкам
+                                local function searchRecursive(parent)
+                                    for _, child in ipairs(parent:GetDescendants()) do
+                                        if child:IsA("TextLabel") or child:IsA("TextButton") then
+                                            local text = string.lower(child.Text)
+                                            if string.find(text, name) or string.find(child.Name, name) then
+                                                -- Попробуем извлечь число из текста
+                                                local numbers = string.gsub(text, "%D+", "")
+                                                if numbers ~= "" then
+                                                    return tonumber(numbers) or 0
+                                                end
+                                            end
+                                        end
+                                    end
+                                    return 0
                                 end
-                            end
-                            
-                            -- Ищем конфеты
-                            local candyObj = inner:FindFirstChild("Candy") or inner:FindFirstChild("Candies") or inner:FindFirstChild("Sweet")
-                            if candyObj then
-                                local amountLabel = candyObj:FindFirstChild("Amount") or candyObj:FindFirstChild("Text") or candyObj:FindFirstChild("Value")
-                                if amountLabel and amountLabel:IsA("TextLabel") then
-                                    local candyText = amountLabel.Text:gsub(",", ""):gsub("🍬", ""):gsub("%s+", "")
-                                    candy = tonumber(candyText) or 0
+                                
+                                local value = searchRecursive(location)
+                                if value > 0 then
+                                    return value
                                 end
                             end
                         end
                     end
+                    return 0
+                end
+                
+                -- Поиск денег
+                money = findCurrencyValue({"coin", "money", "cash", "💰", "$"})
+                
+                -- Поиск конфет
+                candy = findCurrencyValue({"candy", "sweet", "🍬"})
+                
+                -- Альтернативный метод: проверка ReplicatedStorage
+                if money == 0 and candy == 0 then
+                    pcall(function()
+                        if ReplicatedStorage:FindFirstChild("Values") then
+                            local values = ReplicatedStorage.Values
+                            if values:FindFirstChild("Coins") then
+                                money = values.Coins.Value or 0
+                            end
+                            if values:FindFirstChild("Candy") then
+                                candy = values.Candy.Value or 0
+                            end
+                        end
+                    end)
                 end
             end
         end)
@@ -1227,12 +1344,16 @@ local function startUIUpdateLoop(UI)
     -- Основной цикл обновления
     while true do
         pcall(function()
-            -- Обновление таймера
-            local elapsed = tick() - startTime
-            local h = math.floor(elapsed / 3600)
-            local m = math.floor((elapsed % 3600) / 60)
-            local s = math.floor(elapsed % 60)
-            safeUpdateLabel("timerLabel", string.format("Timer: %02d:%02d:%02d ⏱", h, m, s))
+            -- МЕДЛЕННОЕ обновление таймера (каждые 0.5 секунды вместо 0.1)
+            local currentTime = tick()
+            if currentTime - lastTimerUpdate > 0.5 then
+                local elapsed = currentTime - startTime
+                local h = math.floor(elapsed / 3600)
+                local m = math.floor((elapsed % 3600) / 60)
+                local s = math.floor(elapsed % 60)
+                safeUpdateLabel("timerLabel", string.format("Timer: %02d:%02d:%02d ⏱", h, m, s))
+                lastTimerUpdate = currentTime
+            end
             
             -- Обновление статуса очереди
             local inLobby = Workspace:FindFirstChild("Lobby") ~= nil
@@ -1242,8 +1363,8 @@ local function startUIUpdateLoop(UI)
             -- Обновление производительности
             safeUpdateLabel("perfLabel", "FPS: " .. tostring(FPS))
             
-            -- Обновление валюты каждые 2 секунды
-            if tick() - lastCurrencyUpdate > 2 then
+            -- Обновление валюты каждые 3 секунды
+            if tick() - lastCurrencyUpdate > 3 then
                 local money, candy = getCurrency()
                 cachedValues.money = money
                 cachedValues.candy = candy
@@ -1311,6 +1432,12 @@ end
 
 -- ========== ИГРОВАЯ ЛОГИКА ==========
 local function MoveToPosition(targetPos, usePathfinding, timeout)
+    -- ПРОВЕРКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЯ
+    if USER_INPUT_ACTIVE then
+        DebugLog("Movement skipped - user input active")
+        return false
+    end
+    
     timeout = timeout or 15
     if not LocalPlayer or not LocalPlayer.Character then 
         wait(1)
@@ -1344,12 +1471,22 @@ local function MoveToPosition(targetPos, usePathfinding, timeout)
             if path.Status == Enum.PathStatus.Success then
                 local waypoints = path:GetWaypoints()
                 for _, wp in ipairs(waypoints) do
+                    -- ПРОВЕРКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЯ ПЕРЕД КАЖДЫМ ДВИЖЕНИЕМ
+                    if USER_INPUT_ACTIVE then
+                        DebugLog("Pathfinding interrupted - user input active")
+                        break
+                    end
+                    
                     humanoid:MoveTo(wp.Position)
                     
                     local start = tick()
                     local reached = false
                     while tick() - start < 5 do
                         if not humanoid or humanoid.Health <= 0 then break end
+                        if USER_INPUT_ACTIVE then
+                            DebugLog("Movement interrupted - user input active")
+                            break
+                        end
                         if (hrp.Position - wp.Position).Magnitude < 4 then
                             reached = true
                             break 
@@ -1383,6 +1520,10 @@ local function MoveToPosition(targetPos, usePathfinding, timeout)
     
     local startWait = tick()
     while tick() - startWait < timeout do
+        if USER_INPUT_ACTIVE then
+            DebugLog("Movement timeout - user input active")
+            break
+        end
         if result.success then 
             wait(0.5)
             return true 
@@ -1390,7 +1531,7 @@ local function MoveToPosition(targetPos, usePathfinding, timeout)
         task.wait(0.1)
     end
     
-    if humanoid then
+    if humanoid and not USER_INPUT_ACTIVE then
         humanoid:MoveTo(targetPos)
         wait(1)
     end
@@ -1401,6 +1542,12 @@ end
 local AutoState = { Debounce = false, LastAction = 0, RoundHandled = false }
 
 local function RunLobbyRoutine()
+    -- ПРОВЕРКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЯ
+    if USER_INPUT_ACTIVE then
+        DebugLog("Lobby routine skipped - user input active")
+        return 
+    end
+    
     if AutoState.Debounce or SETTINGS.AutoFarmPaused then 
         DebugLog("Lobby routine skipped - debounce or paused")
         return 
@@ -1469,6 +1616,12 @@ local function RunLobbyRoutine()
 end
 
 local function RunAutoFarmOnce()
+    -- ПРОВЕРКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЯ
+    if USER_INPUT_ACTIVE then
+        DebugLog("AutoFarm skipped - user input active")
+        return 
+    end
+    
     if AutoState.Debounce or SETTINGS.AutoFarmPaused then 
         DebugLog("AutoFarm skipped - debounce or paused")
         return 
@@ -1558,7 +1711,8 @@ end
 local TaskRunning = false
 task.spawn(function()
     while true do
-        if SETTINGS.AutoFarmEnabled and not SETTINGS.AutoFarmPaused and not TaskRunning then
+        -- ПРОВЕРКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЯ ПЕРЕД ЗАПУСКОМ ЛЮБОЙ ЗАДАЧИ
+        if not USER_INPUT_ACTIVE and SETTINGS.AutoFarmEnabled and not SETTINGS.AutoFarmPaused and not TaskRunning then
             TaskRunning = true
             
             pcall(function()
@@ -1590,6 +1744,11 @@ local currentSpeed = DEFAULT_SPEED
 local lastHumanoidCheck = 0
 
 local function applyToHumanoid(speed)
+    -- ПРОВЕРКА АКТИВНОСТИ ПОЛЬЗОВАТЕЛЯ
+    if USER_INPUT_ACTIVE then
+        return
+    end
+    
     local char = LocalPlayer and LocalPlayer.Character
     if not char then return end
     
