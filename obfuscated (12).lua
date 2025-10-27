@@ -102,15 +102,14 @@ local function LoadSettings()
     return false
 end
 
--- Функция показа диалога загрузки настроек
+-- УПРОЩЕННАЯ функция показа диалога загрузки настроек
 local function ShowSettingsLoadDialog()
     print("🔄 Showing settings load dialog...")
     
     local dialogResult = nil
-    local countdown = 20
-    local autoAccept = false
+    local countdown = 10 -- Уменьшили время ожидания
     
-    -- Create confirmation dialog
+    -- Create simple confirmation dialog
     local dialogGui = Instance.new("ScreenGui")
     dialogGui.Name = "SettingsConfirmationDialog"
     dialogGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -124,8 +123,8 @@ local function ShowSettingsLoadDialog()
     background.Parent = dialogGui
     
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 400, 0, 220)
-    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -110)
+    mainFrame.Size = IS_MOBILE and UDim2.new(0, 350, 0, 200) or UDim2.new(0, 400, 0, 220)
+    mainFrame.Position = UDim2.new(0.5, -175, 0.5, -100)
     mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
     mainFrame.BorderSizePixel = 0
     mainFrame.ZIndex = 101
@@ -144,39 +143,39 @@ local function ShowSettingsLoadDialog()
     title.Size = UDim2.new(1, 0, 0, 40)
     title.Position = UDim2.new(0, 0, 0, 10)
     title.BackgroundTransparency = 1
-    title.Text = "Load Previous Settings? ⚙️"
+    title.Text = "Load Settings? ⚙️"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 18
+    title.TextSize = IS_MOBILE and 16 or 18
     title.ZIndex = 102
     title.Parent = mainFrame
     
     local message = Instance.new("TextLabel")
-    message.Size = UDim2.new(1, -40, 0, 80)
+    message.Size = UDim2.new(1, -40, 0, 60)
     message.Position = UDim2.new(0, 20, 0, 50)
     message.BackgroundTransparency = 1
-    message.Text = "Would you like to load your previous AutoFarm settings?\n\nMap: " .. (SETTINGS.SelectedMap or "Unknown") .. "\nMode: " .. (SETTINGS.AutofarmMode or "Unknown")
+    message.Text = "Load previous AutoFarm settings?\nMap: " .. (SETTINGS.SelectedMap or "Unknown")
     message.TextColor3 = Color3.fromRGB(200, 200, 200)
     message.Font = Enum.Font.Gotham
-    message.TextSize = 14
+    message.TextSize = IS_MOBILE and 12 or 14
     message.TextWrapped = true
     message.ZIndex = 102
     message.Parent = mainFrame
     
     local timerText = Instance.new("TextLabel")
     timerText.Size = UDim2.new(1, 0, 0, 20)
-    timerText.Position = UDim2.new(0, 0, 0, 140)
+    timerText.Position = UDim2.new(0, 0, 0, 120)
     timerText.BackgroundTransparency = 1
-    timerText.Text = "Auto-accept in: 20 seconds"
+    timerText.Text = "Auto-accept in: 10 seconds"
     timerText.TextColor3 = Color3.fromRGB(255, 255, 0)
     timerText.Font = Enum.Font.Gotham
-    timerText.TextSize = 12
+    timerText.TextSize = IS_MOBILE and 10 or 12
     timerText.ZIndex = 102
     timerText.Parent = mainFrame
     
     local buttonContainer = Instance.new("Frame")
     buttonContainer.Size = UDim2.new(1, -40, 0, 40)
-    buttonContainer.Position = UDim2.new(0, 20, 1, -60)
+    buttonContainer.Position = UDim2.new(0, 20, 1, -50)
     buttonContainer.BackgroundTransparency = 1
     buttonContainer.ZIndex = 102
     buttonContainer.Parent = mainFrame
@@ -188,7 +187,7 @@ local function ShowSettingsLoadDialog()
     yesButton.Text = "YES ✓"
     yesButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     yesButton.Font = Enum.Font.GothamBold
-    yesButton.TextSize = 14
+    yesButton.TextSize = IS_MOBILE and 12 or 14
     yesButton.ZIndex = 103
     yesButton.Parent = buttonContainer
     
@@ -203,7 +202,7 @@ local function ShowSettingsLoadDialog()
     noButton.Text = "NO ✗"
     noButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     noButton.Font = Enum.Font.GothamBold
-    noButton.TextSize = 14
+    noButton.TextSize = IS_MOBILE and 12 or 14
     noButton.ZIndex = 103
     noButton.Parent = buttonContainer
     
@@ -217,31 +216,34 @@ local function ShowSettingsLoadDialog()
         print("✅ Dialog parented to CoreGui")
     end)
     
-    -- Button events - FIXED FOR MOBILE
-    local function handleButtonClick(button, resultValue)
-        local function onClick()
-            print("✅ User clicked " .. (resultValue and "YES" or "NO"))
-            dialogResult = resultValue
-            dialogGui:Destroy()
-        end
-        
+    -- УНИВЕРСАЛЬНЫЕ обработчики кнопок для мобильных и ПК
+    local function setupButton(button, resultValue)
         if IS_MOBILE then
-            button.TouchTap:Connect(onClick)
+            -- Для мобильных используем TouchTap
+            button.TouchTap:Connect(function()
+                print("✅ User clicked " .. (resultValue and "YES" or "NO"))
+                dialogResult = resultValue
+                dialogGui:Destroy()
+            end)
         else
-            button.MouseButton1Click:Connect(onClick)
+            -- Для ПК используем MouseButton1Click
+            button.MouseButton1Click:Connect(function()
+                print("✅ User clicked " .. (resultValue and "YES" or "NO"))
+                dialogResult = resultValue
+                dialogGui:Destroy()
+            end)
         end
     end
     
-    handleButtonClick(yesButton, true)
-    handleButtonClick(noButton, false)
+    setupButton(yesButton, true)
+    setupButton(noButton, false)
     
     -- Countdown timer
     local countdownConnection
     countdownConnection = RunService.Heartbeat:Connect(function()
         if countdown <= 0 then
             countdownConnection:Disconnect()
-            autoAccept = true
-            dialogResult = true
+            dialogResult = true -- Автопринятие
             print("⏰ Auto-accept triggered")
             if dialogGui and dialogGui.Parent then
                 dialogGui:Destroy()
@@ -254,7 +256,7 @@ local function ShowSettingsLoadDialog()
     
     -- Wait for dialog result
     local startWait = tick()
-    while tick() - startWait < 30 do -- 30 second timeout
+    while tick() - startWait < 15 do -- 15 second timeout
         if dialogResult ~= nil then break end
         if not dialogGui.Parent then break end
         wait(0.1)
@@ -263,14 +265,9 @@ local function ShowSettingsLoadDialog()
     if dialogResult == nil then
         print("⚠️ Dialog timeout, defaulting to YES")
         dialogResult = true
-        autoAccept = true
         if dialogGui and dialogGui.Parent then
             dialogGui:Destroy()
         end
-    end
-    
-    if autoAccept then
-        Notify("Settings", "Auto-loading previous settings... ⏰", 3)
     end
     
     print("🔚 Dialog result: " .. tostring(dialogResult))
@@ -427,8 +424,8 @@ local function createBeautifulGui()
     local FONT_SIZE_MEDIUM = math.floor(16 * FONT_SIZE_MULTIPLIER)
     local FONT_SIZE_LARGE = math.floor(18 * FONT_SIZE_MULTIPLIER)
 
-    -- Fullscreen dropdown overlay (larger on mobile)
-    local dropdownOverlay = Instance.new("TextButton") -- CHANGED TO TextButton FOR MOBILE
+    -- Fullscreen dropdown overlay (larger on mobile) - ИСПРАВЛЕНО: TextButton вместо Frame
+    local dropdownOverlay = Instance.new("TextButton")
     dropdownOverlay.Name = "DropdownOverlay"
     dropdownOverlay.Size = UDim2.new(1, 0, 1, 0)
     dropdownOverlay.Position = UDim2.new(0, 0, 0, 0)
@@ -665,7 +662,7 @@ local function createBeautifulGui()
         toggleButton.Parent = toggleFrame
         local bcorner = Instance.new("UICorner"); bcorner.CornerRadius = UDim.new(0,IS_MOBILE and 17 or 14); bcorner.Parent = toggleButton
 
-        -- FIXED INPUT HANDLING FOR MOBILE
+        -- УНИВЕРСАЛЬНЫЙ обработчик для мобильных и ПК
         local function handleToggleClick()
             if DROPDOWN_STATE.IsOpen then return end
             default = not default
@@ -733,7 +730,7 @@ local function createBeautifulGui()
         local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0,IS_MOBILE and 10 or 8); corner.Parent = dropdownButton
         local stroke = Instance.new("UIStroke"); stroke.Color = Color3.fromRGB(100,100,150); stroke.Thickness = 1; stroke.Parent = dropdownButton
 
-        -- FIXED INPUT HANDLING FOR MOBILE
+        -- УНИВЕРСАЛЬНЫЙ обработчик для мобильных и ПК
         local function handleDropdownClick()
             if DROPDOWN_STATE.IsOpen then return end
             
@@ -773,7 +770,7 @@ local function createBeautifulGui()
                 optionStroke.Thickness = 1
                 optionStroke.Parent = optionButton
 
-                -- FIXED INPUT HANDLING FOR MOBILE
+                -- УНИВЕРСАЛЬНЫЙ обработчик для мобильных и ПК
                 local function handleOptionClick()
                     dropdownButton.Text = option
                     if callback then 
@@ -888,7 +885,7 @@ local function createBeautifulGui()
             end
         end
 
-        -- FIXED INPUT HANDLING FOR MOBILE
+        -- УНИВЕРСАЛЬНЫЙ обработчик для мобильных и ПК
         local function handleSliderStart()
             if DROPDOWN_STATE.IsOpen then return end
             local connection
@@ -931,7 +928,7 @@ local function createBeautifulGui()
         return {Container = container, Label = label}
     end
 
-    -- Connect close button - FIXED FOR MOBILE
+    -- Connect close button - УНИВЕРСАЛЬНЫЙ обработчик
     local function handleCloseDropdown()
         closeDropdown()
     end
@@ -941,6 +938,22 @@ local function createBeautifulGui()
     else
         closeDropdownButton.MouseButton1Click:Connect(handleCloseDropdown)
     end
+
+    -- УНИВЕРСАЛЬНЫЕ обработчики для dropdown overlay
+    local function handleDropdownOverlayClick()
+        closeDropdown()
+    end
+
+    if IS_MOBILE then
+        dropdownOverlay.TouchTap:Connect(handleDropdownOverlayClick)
+    else
+        dropdownOverlay.MouseButton1Click:Connect(handleDropdownOverlayClick)
+    end
+
+    -- Prevent closing when tapping inside dropdown container
+    dropdownContainer.MouseButton1Click:Connect(function()
+        -- Do nothing, just prevent event propagation
+    end)
 
     -- Fill content based on device type
     local elements = {}
@@ -1179,7 +1192,7 @@ local function createBeautifulGui()
         end)
     end
 
-    -- Show/Hide button with adaptive behavior - FIXED FOR MOBILE
+    -- Show/Hide button with adaptive behavior - УНИВЕРСАЛЬНЫЙ обработчик
     local function handleShowHideClick()
         if not mainFrame.Visible and not DROPDOWN_STATE.IsOpen then
             mainFrame.Visible = true
@@ -1201,7 +1214,7 @@ local function createBeautifulGui()
         showHideButton.MouseButton1Click:Connect(handleShowHideClick)
     end
 
-    -- Close/minimize - FIXED FOR MOBILE
+    -- Close/minimize - УНИВЕРСАЛЬНЫЙ обработчик
     local function handleCloseClick()
         if DROPDOWN_STATE.IsOpen then return end
         local closeTween = TweenService:Create(mainFrame, TweenInfo.new(0.28), {Size = UDim2.new(0, 0, 0, 0)})
@@ -1215,19 +1228,6 @@ local function createBeautifulGui()
         closeButton.TouchTap:Connect(handleCloseClick)
     else
         closeButton.MouseButton1Click:Connect(handleCloseClick)
-    end
-
-    -- Mobile: add touch gestures for better usability
-    if IS_MOBILE then
-        -- Make dropdown overlay close when tapping outside
-        dropdownOverlay.MouseButton1Click:Connect(function()
-            closeDropdown()
-        end)
-        
-        -- Prevent closing when tapping inside dropdown container
-        dropdownContainer.MouseButton1Click:Connect(function()
-            -- Do nothing, just prevent event propagation
-        end)
     end
 
     DebugLog("GUI created successfully for " .. (IS_MOBILE and "mobile" or "PC"))
