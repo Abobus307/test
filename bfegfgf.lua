@@ -27,48 +27,40 @@ local function initializeScript()
         task.wait(3)
     end
 
-    local _GAME_SERVICES = {}
-    local function _GET_SERVICE(name)
-        if not _GAME_SERVICES[name] then
-            _GAME_SERVICES[name] = game:GetService(name)
-        end
-        return _GAME_SERVICES[name]
-    end
+    local Players = game:GetService("Players")
+    local StarterGui = game:GetService("StarterGui")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService('HttpService')
+    local Workspace = game:GetService('Workspace')
+    local PathfindingService = game:GetService('PathfindingService')
+    local UserInputService = game:GetService('UserInputService')
+    local RunService = game:GetService('RunService')
+    local TeleportService = game:GetService('TeleportService')
+    local LocalPlayer = Players.LocalPlayer
 
-    local _SYS_PLAYERS = _GET_SERVICE("Players")
-    local _SYS_STARTERGUI = _GET_SERVICE("StarterGui")
-    local _SYS_REPLICATEDSTORAGE = _GET_SERVICE("ReplicatedStorage")
-    local _SYS_HTTPSERVICE = _GET_SERVICE('HttpService')
-    local _SYS_WORKSPACE = _GET_SERVICE('Workspace')
-    local _SYS_PATHFINDING = _GET_SERVICE('PathfindingService')
-    local _SYS_USERINPUT = _GET_SERVICE('UserInputService')
-    local _SYS_RUNSERVICE = _GET_SERVICE('RunService')
-    local _SYS_TELEPORT = _GET_SERVICE('TeleportService')
-    local _SYS_LOCALPLAYER = _SYS_PLAYERS.LocalPlayer
+    local lastLobbyTeleport = 0
 
-    local _DATA_LASTLOBBYTELEPORT = 0
-
-    local _PROTECTION_CONFIG = {
+    local ANTI_MOD_CONFIG = {
         Enabled = false,
         Action = "Notify",
         CheckInterval = 30,
         GroupId = 946378404,
-        ModRoleIds = {490360110, 8987623965, 4118621240},
+        ModRoleIds = {490360110, 8987625, 4118621240},
         ProximityAlert = true,
         ProximityDistance = 50
     }
 
-    local _PROTECTION_MODLIST = {}
-    local _PROTECTION_MODCOUNT = 0
-    local _PROTECTION_LASTCHECK = 0
-    local _PROTECTION_RUNNING = false
+    local ModList = {}
+    local ModCount = 0
+    local LastModCheck = 0
+    local AntiModRunning = false
 
-    local function _EXECUTE_ANTI_MOD_ACTION(modName)
-        local action = _PROTECTION_CONFIG.Action
+    local function PerformAntiModAction(modName)
+        local action = ANTI_MOD_CONFIG.Action
         local message = "System alert: " .. modName
         
-        if _SYS_WINDUI then
-            _SYS_WINDUI:Notify({
+        if WindUI then
+            WindUI:Notify({
                 Title = "SYSTEM",
                 Content = message,
                 Duration = 10,
@@ -76,7 +68,7 @@ local function initializeScript()
             })
         else
             pcall(function()
-                _SYS_STARTERGUI:SetCore('SendNotification', {
+                StarterGui:SetCore('SendNotification', {
                     Title = "SYSTEM",
                     Text = message,
                     Duration = 10,
@@ -85,14 +77,14 @@ local function initializeScript()
         end
         
         if action == "Leave" then
-            _SYS_LOCALPLAYER:Kick("SYSTEM: " .. modName)
+            LocalPlayer:Kick("SYSTEM: " .. modName)
         elseif action == "ServerHop" then
             pcall(function()
-                _SYS_TELEPORT:Teleport(game.PlaceId, _SYS_LOCALPLAYER)
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
             end)
         elseif action == "Destruct" then
-            if _SYS_WINDUI then
-                _SYS_WINDUI:Notify({
+            if WindUI then
+                WindUI:Notify({
                     Title = "SYSTEM",
                     Content = "Safety protocol activated",
                     Duration = 5,
@@ -100,7 +92,7 @@ local function initializeScript()
                 })
             else
                 pcall(function()
-                    _SYS_STARTERGUI:SetCore('SendNotification', {
+                    StarterGui:SetCore('SendNotification', {
                         Title = "SYSTEM",
                         Text = "Safety protocol activated",
                         Duration = 5,
@@ -110,34 +102,34 @@ local function initializeScript()
         end
     end
 
-    local function _UPDATE_MODERATOR_UI()
-        if _UI_MODCOUNT then
-            _UI_MODCOUNT:SetDesc(_PROTECTION_MODCOUNT .. " 🚨")
+    local function UpdateModeratorUI()
+        if ModCountParagraph then
+            ModCountParagraph:SetDesc(ModCount .. " 🚨")
         end
         
-        if _UI_MODNAMES then
-            if _PROTECTION_MODCOUNT > 0 then
-                _UI_MODNAMES:SetDesc(table.concat(_PROTECTION_MODLIST, ", "))
+        if ModNamesParagraph then
+            if ModCount > 0 then
+                ModNamesParagraph:SetDesc(table.concat(ModList, ", "))
             else
-                _UI_MODNAMES:SetDesc("No alerts")
+                ModNamesParagraph:SetDesc("No alerts")
             end
         end
     end
 
-    local function _CHECK_PLAYER_ROLES(player)
-        if not _PROTECTION_CONFIG.Enabled or not _SYS_PLAYERS:GetPlayerByUserId(player.UserId) then
+    local function CheckPlayerRoles(player)
+        if not ANTI_MOD_CONFIG.Enabled or not Players:GetPlayerByUserId(player.UserId) then
             return false
         end
 
         local success, roles = pcall(function()
-            return _SYS_PLAYERS:GetRolesInGroupAsync(player.UserId, _PROTECTION_CONFIG.GroupId)
+            return Players:GetRolesInGroupAsync(player.UserId, ANTI_MOD_CONFIG.GroupId)
         end)
 
         if success and roles then
             local isModerator = false
             
             for _, roleId in ipairs(roles) do
-                for _, modRoleId in ipairs(_PROTECTION_CONFIG.ModRoleIds) do
+                for _, modRoleId in ipairs(ANTI_MOD_CONFIG.ModRoleIds) do
                     if roleId == modRoleId then
                         isModerator = true
                         break
@@ -148,37 +140,37 @@ local function initializeScript()
                 end
             end
 
-            if isModerator and not table.find(_PROTECTION_MODLIST, player.Name) then
-                table.insert(_PROTECTION_MODLIST, player.Name)
-                _PROTECTION_MODCOUNT = _PROTECTION_MODCOUNT + 1
-                _UPDATE_MODERATOR_UI()
-                _EXECUTE_ANTI_MOD_ACTION(player.Name)
+            if isModerator and not table.find(ModList, player.Name) then
+                table.insert(ModList, player.Name)
+                ModCount = ModCount + 1
+                UpdateModeratorUI()
+                PerformAntiModAction(player.Name)
                 return true
             end
         end
         return false
     end
 
-    local function _MONITOR_MOD_PROXIMITY()
-        if not _PROTECTION_CONFIG.Enabled or not _PROTECTION_CONFIG.ProximityAlert or _PROTECTION_MODCOUNT == 0 then
+    local function MonitorModProximity()
+        if not ANTI_MOD_CONFIG.Enabled or not ANTI_MOD_CONFIG.ProximityAlert or ModCount == 0 then
             return
         end
 
-        local character = _SYS_LOCALPLAYER.Character
+        local character = LocalPlayer.Character
         if not character or not character:FindFirstChild("HumanoidRootPart") then
             return
         end
 
         local playerPos = character.HumanoidRootPart.Position
         
-        for _, player in ipairs(_SYS_PLAYERS:GetPlayers()) do
-            if table.find(_PROTECTION_MODLIST, player.Name) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if table.find(ModList, player.Name) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                 local modPos = player.Character.HumanoidRootPart.Position
                 local distance = (playerPos - modPos).Magnitude
                 
-                if distance <= _PROTECTION_CONFIG.ProximityDistance then
-                    if _SYS_WINDUI then
-                        _SYS_WINDUI:Notify({
+                if distance <= ANTI_MOD_CONFIG.ProximityDistance then
+                    if WindUI then
+                        WindUI:Notify({
                             Title = "WARNING",
                             Content = "Alert: " .. player.Name .. " proximity! " .. math.floor(distance) .. " units",
                             Duration = 5,
@@ -186,7 +178,7 @@ local function initializeScript()
                         })
                     else
                         pcall(function()
-                            _SYS_STARTERGUI:SetCore('SendNotification', {
+                            StarterGui:SetCore('SendNotification', {
                                 Title = "WARNING",
                                 Text = "Alert: " .. player.Name .. " proximity! " .. math.floor(distance) .. " units",
                                 Duration = 5,
@@ -200,42 +192,42 @@ local function initializeScript()
         end
     end
 
-    local function _ANTI_MOD_LOOP()
-        if _PROTECTION_RUNNING or not _PROTECTION_CONFIG.Enabled then
+    local function AntiModLoop()
+        if AntiModRunning or not ANTI_MOD_CONFIG.Enabled then
             return
         end
 
-        _PROTECTION_RUNNING = true
+        AntiModRunning = true
         
-        while _PROTECTION_CONFIG.Enabled do
+        while ANTI_MOD_CONFIG.Enabled do
             local currentTime = tick()
             
-            if currentTime - _PROTECTION_LASTCHECK >= _PROTECTION_CONFIG.CheckInterval then
-                _PROTECTION_MODLIST = {}
-                _PROTECTION_MODCOUNT = 0
+            if currentTime - LastModCheck >= ANTI_MOD_CONFIG.CheckInterval then
+                ModList = {}
+                ModCount = 0
                 
-                for _, player in ipairs(_SYS_PLAYERS:GetPlayers()) do
-                    if player ~= _SYS_LOCALPLAYER then
-                        _CHECK_PLAYER_ROLES(player)
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer then
+                        CheckPlayerRoles(player)
                         task.wait(0.3)
                     end
                 end
                 
-                _PROTECTION_LASTCHECK = currentTime
-                _UPDATE_MODERATOR_UI()
+                LastModCheck = currentTime
+                UpdateModeratorUI()
             end
             
-            _MONITOR_MOD_PROXIMITY()
+            MonitorModProximity()
             task.wait(5)
         end
         
-        _PROTECTION_RUNNING = false
+        AntiModRunning = false
     end
 
-    local function _FORCE_FULL_CHECK()
-        if not _PROTECTION_CONFIG.Enabled then
-            if _SYS_WINDUI then
-                _SYS_WINDUI:Notify({
+    local function ForceFullCheck()
+        if not ANTI_MOD_CONFIG.Enabled then
+            if WindUI then
+                WindUI:Notify({
                     Title = "SYSTEM",
                     Content = "Enable protection first",
                     Duration = 3,
@@ -243,7 +235,7 @@ local function initializeScript()
                 })
             else
                 pcall(function()
-                    _SYS_STARTERGUI:SetCore('SendNotification', {
+                    StarterGui:SetCore('SendNotification', {
                         Title = "SYSTEM",
                         Text = "Enable protection first",
                         Duration = 3,
@@ -253,12 +245,12 @@ local function initializeScript()
             return
         end
         
-        local originalModCount = _PROTECTION_MODCOUNT
-        _PROTECTION_MODLIST = {}
-        _PROTECTION_MODCOUNT = 0
+        local originalModCount = ModCount
+        ModList = {}
+        ModCount = 0
         
-        if _SYS_WINDUI then
-            _SYS_WINDUI:Notify({
+        if WindUI then
+            WindUI:Notify({
                 Title = "SYSTEM",
                 Content = "Scanning all players...",
                 Duration = 2,
@@ -266,7 +258,7 @@ local function initializeScript()
             })
         else
             pcall(function()
-                _SYS_STARTERGUI:SetCore('SendNotification', {
+                StarterGui:SetCore('SendNotification', {
                     Title = "SYSTEM",
                     Text = "Scanning all players...",
                     Duration = 2,
@@ -276,9 +268,9 @@ local function initializeScript()
         
         local foundModerators = {}
         
-        for _, player in ipairs(_SYS_PLAYERS:GetPlayers()) do
-            if player ~= _SYS_LOCALPLAYER then
-                local isMod = _CHECK_PLAYER_ROLES(player)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local isMod = CheckPlayerRoles(player)
                 if isMod then
                     table.insert(foundModerators, player.Name)
                 end
@@ -286,12 +278,12 @@ local function initializeScript()
             end
         end
         
-        _PROTECTION_LASTCHECK = 0
-        _UPDATE_MODERATOR_UI()
+        LastModCheck = 0
+        UpdateModeratorUI()
         
         if #foundModerators > 0 then
-            if _SYS_WINDUI then
-                _SYS_WINDUI:Notify({
+            if WindUI then
+                WindUI:Notify({
                     Title = "SCAN RESULT",
                     Content = "🚨 DETECTED " .. #foundModerators .. " ALERTS: " .. table.concat(foundModerators, ", "),
                     Duration = 8,
@@ -299,7 +291,7 @@ local function initializeScript()
                 })
             else
                 pcall(function()
-                    _SYS_STARTERGUI:SetCore('SendNotification', {
+                    StarterGui:SetCore('SendNotification', {
                         Title = "SCAN RESULT",
                         Text = "🚨 DETECTED " .. #foundModerators .. " ALERTS: " .. table.concat(foundModerators, ", "),
                         Duration = 8,
@@ -307,8 +299,8 @@ local function initializeScript()
                 end)
             end
         else
-            if _SYS_WINDUI then
-                _SYS_WINDUI:Notify({
+            if WindUI then
+                WindUI:Notify({
                     Title = "SCAN RESULT",
                     Content = "✅ NO ALERTS FOUND - System normal",
                     Duration = 5,
@@ -316,7 +308,7 @@ local function initializeScript()
                 })
             else
                 pcall(function()
-                    _SYS_STARTERGUI:SetCore('SendNotification', {
+                    StarterGui:SetCore('SendNotification', {
                         Title = "SCAN RESULT",
                         Text = "✅ NO ALERTS FOUND - System normal",
                         Duration = 5,
@@ -326,32 +318,32 @@ local function initializeScript()
         end
     end
 
-    _SYS_PLAYERS.PlayerRemoving:Connect(function(player)
-        if table.find(_PROTECTION_MODLIST, player.Name) then
-            local index = table.find(_PROTECTION_MODLIST, player.Name)
-            table.remove(_PROTECTION_MODLIST, index)
-            _PROTECTION_MODCOUNT = _PROTECTION_MODCOUNT - 1
-            _UPDATE_MODERATOR_UI()
+    Players.PlayerRemoving:Connect(function(player)
+        if table.find(ModList, player.Name) then
+            local index = table.find(ModList, player.Name)
+            table.remove(ModList, index)
+            ModCount = ModCount - 1
+            UpdateModeratorUI()
         end
     end)
 
-    local _DEBUG_MODE = false
-    local _DEBOUNCE_FLAG = false
+    local DEBUG = false
+    local debounce = false
 
-    local function _DEBUG_LOG(...)
-        if _DEBUG_MODE then print("[SYSTEM] ", ...) end
+    local function dbg(...)
+        if DEBUG then print("[SYSTEM] ", ...) end
     end
 
-    local function _FIND_MENU_GUI()
-        local mg = _SYS_STARTERGUI:FindFirstChild("MenuGui")
+    local function fastFindMenuGui()
+        local mg = StarterGui:FindFirstChild("MenuGui")
         if mg then return mg end
-        if _SYS_LOCALPLAYER and _SYS_LOCALPLAYER:FindFirstChild("PlayerGui") then
-            return _SYS_LOCALPLAYER.PlayerGui:FindFirstChild("MenuGui")
+        if LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui") then
+            return LocalPlayer.PlayerGui:FindFirstChild("MenuGui")
         end
         return nil
     end
 
-    local function _COLLECT_PLAY_BUTTONS(menuGui)
+    local function collectPlayButtons(menuGui)
         local out = {}
         if not menuGui then return out end
         for _, child in ipairs(menuGui:GetChildren()) do
@@ -373,17 +365,17 @@ local function initializeScript()
         return out
     end
 
-    local function _TRY_ACTIVATE_BUTTON(btn)
+    local function tryActivateButton(btn)
         if not btn or not btn:IsA("TextButton") then return false end
 
         if pcall(function() btn:Activate() end) then
-            _DEBUG_LOG("Activated:", btn:GetFullName())
+            dbg("Activated:", btn:GetFullName())
             return true
         end
 
         if btn:FindFirstChild("MouseButton1Click") and typeof(btn.MouseButton1Click.Fire) == "function" then
             if pcall(function() btn.MouseButton1Click:Fire() end) then
-                _DEBUG_LOG("MouseButton1Click fired for", btn:GetFullName())
+                dbg("MouseButton1Click fired for", btn:GetFullName())
                 return true
             end
         end
@@ -394,7 +386,7 @@ local function initializeScript()
                 task.wait(0.06)
                 btn.MouseButton1Up:Fire()
             end) then
-                _DEBUG_LOG("Down/Up fired for", btn:GetFullName())
+                dbg("Down/Up fired for", btn:GetFullName())
                 return true
             end
         end
@@ -402,7 +394,7 @@ local function initializeScript()
         return false
     end
 
-    local _REMOTE_NAMES = {
+    local likelyRemotes = {
         "Play",
         "PlaySound",
         "PlayerLoaded",
@@ -412,45 +404,45 @@ local function initializeScript()
         "Roblox_PlayHalloweenSuspectAnimation"
     }
 
-    local function _FIRE_REMOTES()
-        local eventsFolder = _SYS_REPLICATEDSTORAGE:FindFirstChild("Events")
+    local function fireNamedRemotes()
+        local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
         local firedAny = false
 
-        local function _TRY_FIRE(obj)
+        local function tryFire(obj)
             if not obj then return false end
             if obj:IsA("RemoteEvent") then
                 local ok = pcall(function() obj:FireServer() end)
                 if ok then
-                    _DEBUG_LOG("Fired RemoteEvent:", obj:GetFullName())
+                    dbg("Fired RemoteEvent:", obj:GetFullName())
                     return true
                 else
-                    _DEBUG_LOG("Failed to fire (RemoteEvent):", obj:GetFullName())
+                    dbg("Failed to fire (RemoteEvent):", obj:GetFullName())
                 end
             elseif obj:IsA("RemoteFunction") then
                 local ok = pcall(function() obj:InvokeServer() end)
                 if ok then
-                    _DEBUG_LOG("Invoked RemoteFunction:", obj:GetFullName())
+                    dbg("Invoked RemoteFunction:", obj:GetFullName())
                     return true
                 else
-                    _DEBUG_LOG("Failed to invoke (RemoteFunction):", obj:GetFullName())
+                    dbg("Failed to invoke (RemoteFunction):", obj:GetFullName())
                 end
             end
             return false
         end
 
         if eventsFolder then
-            for _, name in ipairs(_REMOTE_NAMES) do
+            for _, name in ipairs(likelyRemotes) do
                 local r = eventsFolder:FindFirstChild(name)
-                if r and _TRY_FIRE(r) then
+                if r and tryFire(r) then
                     firedAny = true
                 end
             end
         end
 
-        for _, name in ipairs(_REMOTE_NAMES) do
+        for _, name in ipairs(likelyRemotes) do
             if not firedAny then
-                local rTop = _SYS_REPLICATEDSTORAGE:FindFirstChild(name)
-                if rTop and _TRY_FIRE(rTop) then
+                local rTop = ReplicatedStorage:FindFirstChild(name)
+                if rTop and tryFire(rTop) then
                     firedAny = true
                 end
             else
@@ -460,78 +452,78 @@ local function initializeScript()
         return firedAny
     end
 
-    local function _QUICK_PLAY_ROUTINE()
-        if _DEBOUNCE_FLAG then
-            _DEBUG_LOG("debounce active, exit")
+    local function ultimateClickPlayFast()
+        if debounce then
+            dbg("debounce active, exit")
             return false
         end
-        _DEBOUNCE_FLAG = true
+        debounce = true
 
         task.wait(0.8)
 
-        local menuGui = _FIND_MENU_GUI()
+        local menuGui = fastFindMenuGui()
         if not menuGui then
             warn("MenuGui not found")
-            _DEBOUNCE_FLAG = false
+            debounce = false
             return false
         end
 
-        local playButtons = _COLLECT_PLAY_BUTTONS(menuGui)
+        local playButtons = collectPlayButtons(menuGui)
 
         if #playButtons > 0 then
-            _DEBUG_LOG("Found play buttons:", #playButtons)
+            dbg("Found play buttons:", #playButtons)
             for _, pbtn in ipairs(playButtons) do
-                _DEBUG_LOG("Trying to activate:", pbtn.name)
-                if _TRY_ACTIVATE_BUTTON(pbtn.button) then
+                dbg("Trying to activate:", pbtn.name)
+                if tryActivateButton(pbtn.button) then
                     task.wait(0.45)
-                    if not _FIND_MENU_GUI() then
-                        _DEBUG_LOG("Menu closed after pressing button:", pbtn.name)
-                        _DEBOUNCE_FLAG = false
+                    if not fastFindMenuGui() then
+                        dbg("Menu closed after pressing button:", pbtn.name)
+                        debounce = false
                         return true
                     end
                 end
             end
         else
-            _DEBUG_LOG("No Play buttons found in MenuGui")
+            dbg("No Play buttons found in MenuGui")
         end
 
-        _DEBUG_LOG("Trying to call target remotes from ReplicatedStorage.Events")
-        local remotesFired = _FIRE_REMOTES()
+        dbg("Trying to call target remotes from ReplicatedStorage.Events")
+        local remotesFired = fireNamedRemotes()
         task.wait(0.6)
 
-        if remotesFired and not _FIND_MENU_GUI() then
-            _DEBUG_LOG("Menu closed after firing remotes")
-            _DEBOUNCE_FLAG = false
+        if remotesFired and not fastFindMenuGui() then
+            dbg("Menu closed after firing remotes")
+            debounce = false
             return true
         end
 
-        _DEBUG_LOG("Retrying to activate buttons as fallback")
+        dbg("Retrying to activate buttons as fallback")
         for _, pbtn in ipairs(playButtons) do
-            if _TRY_ACTIVATE_BUTTON(pbtn.button) then
+            if tryActivateButton(pbtn.button) then
                 task.wait(0.45)
-                if not _FIND_MENU_GUI() then
-                    _DEBUG_LOG("Menu closed on retry:", pbtn.name)
-                    _DEBOUNCE_FLAG = false
+                if not fastFindMenuGui() then
+                    dbg("Menu closed on retry:", pbtn.name)
+                    debounce = false
                     return true
                 end
             end
         end
 
-        _DEBUG_LOG("Nothing closed the menu")
-        _DEBOUNCE_FLAG = false
+        dbg("Nothing closed the menu")
+        debounce = false
         return false
     end
 
-    _QUICK_PLAY_ROUTINE()
+    ultimateClickPlayFast()
     task.wait(1)
 
-    _SYS_WINDUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+    local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
-    local _MAP_LIST = {'Motel Room', 'Humble Abode', 'Bathroom', 'Moolah Manor', 'Gas Station', 'Abandoned Apartment'}
-    local _APP_NAME = "ArmlessToolkit"
-    local _SETTINGS_FILE = "ArmlessToolkit_Settings.json"
+    local MAPS = {'Motel Room', 'Humble Abode', 'Bathroom', 'Moolah Manor', 'Gas Station', 'Abandoned Apartment'}
+    local NAME = "CoolMan2"
+    local SETTINGS_FILE = "CoolMan2_Settings.json"
 
-    local _SETTINGS_DATA = {
+    local SETTINGS = {
         AutoFarmEnabled = false,
         AutoFarmPaused = false,
         AutofarmMode = "Legit (Slow)",
@@ -543,15 +535,15 @@ local function initializeScript()
         AntiModProximityAlert = true
     }
 
-    local function _LOAD_SETTINGS()
+    local function LoadSettings()
         if readfile and isfile then
-            if isfile(_SETTINGS_FILE) then
+            if isfile(SETTINGS_FILE) then
                 local success, result = pcall(function()
-                    local data = readfile(_SETTINGS_FILE)
-                    local loaded = _SYS_HTTPSERVICE:JSONDecode(data)
+                    local data = readfile(SETTINGS_FILE)
+                    local loaded = HttpService:JSONDecode(data)
                     for key, value in pairs(loaded) do
-                        if _SETTINGS_DATA[key] ~= nil then
-                            _SETTINGS_DATA[key] = value
+                        if SETTINGS[key] ~= nil then
+                            SETTINGS[key] = value
                         end
                     end
                     return true
@@ -562,31 +554,31 @@ local function initializeScript()
         return false
     end
 
-    _LOAD_SETTINGS()
+    LoadSettings()
 
-    _PROTECTION_CONFIG.Enabled = _SETTINGS_DATA.AntiModEnabled
-    _PROTECTION_CONFIG.Action = _SETTINGS_DATA.AntiModAction
-    _PROTECTION_CONFIG.ProximityAlert = _SETTINGS_DATA.AntiModProximityAlert
+    ANTI_MOD_CONFIG.Enabled = SETTINGS.AntiModEnabled
+    ANTI_MOD_CONFIG.Action = SETTINGS.AntiModAction
+    ANTI_MOD_CONFIG.ProximityAlert = SETTINGS.AntiModProximityAlert
 
-    local _AUTOFARM_STATE = { Debounce = false, LastAction = 0, RoundHandled = false }
-    local _TASK_RUNNING = false
-    local _FPS_VALUE = 0
-    local _FRAME_COUNTER = 0
-    local _LAST_FPS_UPDATE = tick()
-    local _START_TIME = tick()
+    local AutoState = { Debounce = false, LastAction = 0, RoundHandled = false }
+    local TaskRunning = false
+    local FPS = 0
+    local frameCount = 0
+    local lastFpsUpdate = tick()
+    local startTime = tick()
 
-    local function _SHOW_NOTIFICATION(title, text, duration)
-        if _SYS_WINDUI then
-            _SYS_WINDUI:Notify({
-                Title = title or _APP_NAME,
+    local function Notify(title, text, duration)
+        if WindUI then
+            WindUI:Notify({
+                Title = title or NAME,
                 Content = text or '',
                 Duration = duration or 3,
                 Icon = "info",
             })
         else
             pcall(function()
-                _SYS_STARTERGUI:SetCore('SendNotification', {
-                    Title = title or _APP_NAME,
+                StarterGui:SetCore('SendNotification', {
+                    Title = title or NAME,
                     Text = text or '',
                     Duration = duration or 3,
                 })
@@ -594,41 +586,41 @@ local function initializeScript()
         end
     end
 
-    local function _SAVE_SETTINGS()
+    local function SaveSettings()
         if writefile then
             pcall(function()
-                _SETTINGS_DATA.AntiModEnabled = _PROTECTION_CONFIG.Enabled
-                _SETTINGS_DATA.AntiModAction = _PROTECTION_CONFIG.Action
-                _SETTINGS_DATA.AntiModProximityAlert = _PROTECTION_CONFIG.ProximityAlert
+                SETTINGS.AntiModEnabled = ANTI_MOD_CONFIG.Enabled
+                SETTINGS.AntiModAction = ANTI_MOD_CONFIG.Action
+                SETTINGS.AntiModProximityAlert = ANTI_MOD_CONFIG.ProximityAlert
                 
-                local data = _SYS_HTTPSERVICE:JSONEncode(_SETTINGS_DATA)
-                writefile(_SETTINGS_FILE, data)
+                local data = HttpService:JSONEncode(SETTINGS)
+                writefile(SETTINGS_FILE, data)
             end)
         end
     end
 
-    local _MAIN_WINDOW = _SYS_WINDUI:CreateWindow({
-        Title = _APP_NAME .. ' - Armless Detective',
-        Author = 'by System',
-        Folder = 'ArmlessToolkit',
+    local Window = WindUI:CreateWindow({
+        Title = NAME .. ' - Armless Detective',
+        Author = 'by CoolMan2',
+        Folder = 'CoolMan2',
         Theme = "Dark",
         Transparent = true,
     })
 
-    local _TAB_AUTOFARM = _MAIN_WINDOW:Tab({ Title = 'Autofarm 🎮' })
-    local _TAB_ANTIMOD = _MAIN_WINDOW:Tab({ Title = 'Anti-Mod 🛡️' })
-    local _TAB_UTILITIES = _MAIN_WINDOW:Tab({ Title = 'Utilities 🛠' })
-    local _TAB_STATISTICS = _MAIN_WINDOW:Tab({ Title = 'Statistics 📊' })
+    local AutofarmTab = Window:Tab({ Title = 'Autofarm 🎮' })
+    local AntiModTab = Window:Tab({ Title = 'Anti-Mod 🛡️' })
+    local UtilitiesTab = Window:Tab({ Title = 'Utilities 🛠' })
+    local StatisticsTab = Window:Tab({ Title = 'Statistics 📊' })
 
-    local _BUTTON_RETURNLOBBY = _TAB_UTILITIES:Button({
+    local ReturnToLobbyButton = UtilitiesTab:Button({
         Title = 'Return to Lobby 🔄',
         Desc = 'Teleport to lobby',
         Callback = function()
             local currentTime = tick()
-            local cooldownRemaining = 3 - (currentTime - _DATA_LASTLOBBYTELEPORT)
+            local cooldownRemaining = 3 - (currentTime - lastLobbyTeleport)
             
             if cooldownRemaining > 0 then
-                _SYS_WINDUI:Notify({
+                WindUI:Notify({
                     Title = "Cooldown",
                     Content = "Please wait " .. math.ceil(cooldownRemaining) .. " seconds",
                     Duration = 2,
@@ -637,9 +629,9 @@ local function initializeScript()
                 return
             end
             
-            _DATA_LASTLOBBYTELEPORT = currentTime
+            lastLobbyTeleport = currentTime
             
-            _SYS_WINDUI:Notify({
+            WindUI:Notify({
                 Title = "Teleporting",
                 Content = "Returning to lobby...",
                 Duration = 2,
@@ -647,172 +639,172 @@ local function initializeScript()
             })
             
             pcall(function()
-                _SYS_TELEPORT:Teleport(97719631053849, _SYS_LOCALPLAYER)
+                TeleportService:Teleport(97719631053849, LocalPlayer)
             end)
         end,
     })
 
-    local _UI_ANTIMODWARNING = _TAB_ANTIMOD:Paragraph({ 
+    local AntiModWarningParagraph = AntiModTab:Paragraph({ 
         Title = '⚠️ BETA TESTING', 
         Desc = 'This feature is in testing phase. Bugs may occur!' 
     })
 
-    _UI_MODCOUNT = _TAB_ANTIMOD:Paragraph({ Title = 'Moderators Online', Desc = '0 🚨' })
-    _UI_MODNAMES = _TAB_ANTIMOD:Paragraph({ Title = 'Moderator List', Desc = 'No alerts' })
+    local ModCountParagraph = AntiModTab:Paragraph({ Title = 'Moderators Online', Desc = '0 🚨' })
+    local ModNamesParagraph = AntiModTab:Paragraph({ Title = 'Moderator List', Desc = 'No alerts' })
     
-    local initialAntiModStatus = _PROTECTION_CONFIG.Enabled and '🟢Active' or '🔴Disabled'
-    local _UI_ANTIMODSTATUS = _TAB_ANTIMOD:Paragraph({ Title = 'System Status', Desc = initialAntiModStatus })
+    local initialAntiModStatus = ANTI_MOD_CONFIG.Enabled and '🟢Active' or '🔴Disabled'
+    local AntiModStatusParagraph = AntiModTab:Paragraph({ Title = 'System Status', Desc = initialAntiModStatus })
 
-    local _TOGGLE_ANTIMOD = _TAB_ANTIMOD:Toggle({
+    local AntiModToggle = AntiModTab:Toggle({
         Title = 'Protection System',
         Desc = 'Enable security protection',
-        Value = _PROTECTION_CONFIG.Enabled,
+        Value = ANTI_MOD_CONFIG.Enabled,
         Callback = function(Value)
-            _PROTECTION_CONFIG.Enabled = Value
-            _SAVE_SETTINGS()
+            ANTI_MOD_CONFIG.Enabled = Value
+            SaveSettings()
             
             if Value then
-                _UI_ANTIMODSTATUS:SetDesc('🟢Active')
-                task.spawn(_ANTI_MOD_LOOP)
-                _SHOW_NOTIFICATION('SYSTEM', 'Protection activated 🛡️')
+                AntiModStatusParagraph:SetDesc('🟢Active')
+                task.spawn(AntiModLoop)
+                Notify('SYSTEM', 'Protection activated 🛡️')
             else
-                _UI_ANTIMODSTATUS:SetDesc('🔴Disabled')
-                _PROTECTION_MODLIST = {}
-                _PROTECTION_MODCOUNT = 0
-                _UPDATE_MODERATOR_UI()
-                _SHOW_NOTification('SYSTEM', 'Protection disabled')
+                AntiModStatusParagraph:SetDesc('🔴Disabled')
+                ModList = {}
+                ModCount = 0
+                UpdateModeratorUI()
+                Notify('SYSTEM', 'Protection disabled')
             end
         end,
     })
 
-    local _DROPDOWN_ANTIMODACTION = _TAB_ANTIMOD:Dropdown({
+    local AntiModActionDropdown = AntiModTab:Dropdown({
         Title = 'Action on Detection',
         Desc = 'What to do when alert is detected',
         Values = {'Notify', 'Leave', 'ServerHop', 'Destruct'},
-        Value = _PROTECTION_CONFIG.Action,
+        Value = ANTI_MOD_CONFIG.Action,
         Multi = false,
         Callback = function(Option)
-            _PROTECTION_CONFIG.Action = Option
-            _SAVE_SETTINGS()
-            _SHOW_NOTIFICATION('SYSTEM', 'Action set to: ' .. Option)
+            ANTI_MOD_CONFIG.Action = Option
+            SaveSettings()
+            Notify('SYSTEM', 'Action set to: ' .. Option)
         end,
     })
 
-    local _TOGGLE_ANTIMODPROXIMITY = _TAB_ANTIMOD:Toggle({
+    local AntiModProximityToggle = AntiModTab:Toggle({
         Title = 'Proximity Alert',
         Desc = 'Warn if alert is nearby',
-        Value = _PROTECTION_CONFIG.ProximityAlert,
+        Value = ANTI_MOD_CONFIG.ProximityAlert,
         Callback = function(Value)
-            _PROTECTION_CONFIG.ProximityAlert = Value
-            _SAVE_SETTINGS()
-            _SHOW_NOTIFICATION('SYSTEM', Value and 'Proximity alerts enabled 📍' or 'Proximity alerts disabled')
+            ANTI_MOD_CONFIG.ProximityAlert = Value
+            SaveSettings()
+            Notify('SYSTEM', Value and 'Proximity alerts enabled 📍' or 'Proximity alerts disabled')
         end,
     })
 
-    local _BUTTON_FULLCHECK = _TAB_ANTIMOD:Button({
+    local ForceFullCheckButton = AntiModTab:Button({
         Title = 'Quick Check All Players 🔄',
         Desc = 'Force check all players and show result',
-        Callback = _FORCE_FULL_CHECK
+        Callback = ForceFullCheck
     })
 
-    if _PROTECTION_CONFIG.Enabled then
-        task.spawn(_ANTI_MOD_LOOP)
+    if ANTI_MOD_CONFIG.Enabled then
+        task.spawn(AntiModLoop)
     end
 
-    local _UI_COINS = _TAB_STATISTICS:Paragraph({ Title = 'Coins', Desc = 'Loading... 💰' })
+    local CoinsParagraph = StatisticsTab:Paragraph({ Title = 'Coins', Desc = 'Loading... 💰' })
 
-    local _UI_TIMER = _TAB_AUTOFARM:Paragraph({ Title = 'Timer', Desc = '00:00:00 ⏱' })
-    local _UI_GUILTY = _TAB_AUTOFARM:Paragraph({ Title = 'Target', Desc = 'Unknown 🕵️' })
-    local _UI_QUEUE = _TAB_AUTOFARM:Paragraph({ Title = 'Status', Desc = 'Waiting' })
-    local _UI_AUTOFARMSTATUS = _TAB_AUTOFARM:Paragraph({ Title = 'AutoFarm Status', Desc = '🔴Disabled' })
+    local TimerParagraph = AutofarmTab:Paragraph({ Title = 'Timer', Desc = '00:00:00 ⏱' })
+    local GuiltyParagraph = AutofarmTab:Paragraph({ Title = 'Target', Desc = 'Unknown 🕵️' })
+    local QueueParagraph = AutofarmTab:Paragraph({ Title = 'Status', Desc = 'Waiting' })
+    local AutofarmStatusParagraph = AutofarmTab:Paragraph({ Title = 'AutoFarm Status', Desc = '🔴Disabled' })
 
-    local _TOGGLE_AUTOFARM = _TAB_AUTOFARM:Toggle({
+    local AutoFarmToggle = AutofarmTab:Toggle({
         Title = 'Auto Farm',
         Desc = 'Enable auto farming',
-        Value = _SETTINGS_DATA.AutoFarmEnabled,
+        Value = SETTINGS.AutoFarmEnabled,
         Callback = function(Value)
-            _SETTINGS_DATA.AutoFarmEnabled = Value
-            _SAVE_SETTINGS()
-            _SHOW_NOTIFICATION('AutoFarm', Value and 'AutoFarm enabled 🎮' or 'AutoFarm disabled')
+            SETTINGS.AutoFarmEnabled = Value
+            SaveSettings()
+            Notify('AutoFarm', Value and 'AutoFarm enabled 🎮' or 'AutoFarm disabled')
         end,
     })
 
-    local _TOGGLE_PAUSE = _TAB_AUTOFARM:Toggle({
+    local PauseToggle = AutofarmTab:Toggle({
         Title = 'Pause Autofarm',
         Desc = 'Pause autofarm',
-        Value = _SETTINGS_DATA.AutoFarmPaused,
+        Value = SETTINGS.AutoFarmPaused,
         Callback = function(Value)
-            _SETTINGS_DATA.AutoFarmPaused = Value
-            _SAVE_SETTINGS()
-            _SHOW_NOTIFICATION('AutoFarm', Value and 'AutoFarm paused ⏸' or 'AutoFarm resumed ▶️')
+            SETTINGS.AutoFarmPaused = Value
+            SaveSettings()
+            Notify('AutoFarm', Value and 'AutoFarm paused ⏸' or 'AutoFarm resumed ▶️')
         end,
     })
 
-    local _DROPDOWN_MODE = _TAB_AUTOFARM:Dropdown({
+    local ModeDropdown = AutofarmTab:Dropdown({
         Title = 'Farm Mode',
         Desc = 'Choose farm mode',
         Values = {'Legit (Slow)', 'Blatant (Fast)'},
-        Value = _SETTINGS_DATA.AutofarmMode,
+        Value = SETTINGS.AutofarmMode,
         Multi = false,
         Callback = function(Option)
-            _SETTINGS_DATA.AutofarmMode = Option
-            _SAVE_SETTINGS()
-            _SHOW_NOTIFICATION('AutoFarm', 'Mode set to: ' .. Option)
+            SETTINGS.AutofarmMode = Option
+            SaveSettings()
+            Notify('AutoFarm', 'Mode set to: ' .. Option)
         end,
     })
 
-    local _DROPDOWN_MAP = _TAB_AUTOFARM:Dropdown({
+    local MapDropdown = AutofarmTab:Dropdown({
         Title = 'Select Map',
         Desc = 'Choose map',
-        Values = _MAP_LIST,
-        Value = _SETTINGS_DATA.SelectedMap,
+        Values = MAPS,
+        Value = SETTINGS.SelectedMap,
         Multi = false,
         Callback = function(Option)
-            _SETTINGS_DATA.SelectedMap = Option
-            _SAVE_SETTINGS()
-            _SHOW_NOTIFICATION('AutoFarm', 'Selected map: ' .. Option)
+            SETTINGS.SelectedMap = Option
+            SaveSettings()
+            Notify('AutoFarm', 'Selected map: ' .. Option)
         end,
     })
 
-    local _UI_PERFORMANCE = _TAB_UTILITIES:Paragraph({ Title = 'Performance', Desc = 'FPS: 0' })
-    local _UI_BANRISK = _TAB_UTILITIES:Paragraph({ Title = 'Risk Level', Desc = 'Low' })
+    local PerformanceParagraph = UtilitiesTab:Paragraph({ Title = 'Performance', Desc = 'FPS: 0' })
+    local BanRiskParagraph = UtilitiesTab:Paragraph({ Title = 'Risk Level', Desc = 'Low' })
 
-    local _TOGGLE_SPEED = _TAB_UTILITIES:Toggle({
+    local SpeedToggle = UtilitiesTab:Toggle({
         Title = 'Enable Speed',
         Desc = 'Enable/disable speed adjustment',
-        Value = _SETTINGS_DATA.SpeedHackEnabled,
+        Value = SETTINGS.SpeedHackEnabled,
         Callback = function(Value)
-            _SETTINGS_DATA.SpeedHackEnabled = Value
-            _SAVE_SETTINGS()
-            _SHOW_NOTIFICATION('Speed', Value and 'Speed enabled ⚡' or 'Speed disabled')
+            SETTINGS.SpeedHackEnabled = Value
+            SaveSettings()
+            Notify('Speed', Value and 'Speed enabled ⚡' or 'Speed disabled')
         end,
     })
 
-    local _SLIDER_SPEED = _TAB_UTILITIES:Slider({
+    local SpeedSlider = UtilitiesTab:Slider({
         Title = "Speed Value",
         Desc = "Character movement speed",
         Step = 1,
         Value = {
             Min = 16,
             Max = 90,
-            Default = _SETTINGS_DATA.SpeedValue or 16,
+            Default = SETTINGS.SpeedValue or 16,
         },
         Callback = function(value)
-            _SETTINGS_DATA.SpeedValue = value
-            _SAVE_SETTINGS()
+            SETTINGS.SpeedValue = value
+            SaveSettings()
         end
     })
 
-    local function _MOVE_TO_POSITION(targetPos, usePathfinding, timeout)
+    local function MoveToPosition(targetPos, usePathfinding, timeout)
         timeout = timeout or 15
-        if not _SYS_LOCALPLAYER or not _SYS_LOCALPLAYER.Character then 
+        if not LocalPlayer or not LocalPlayer.Character then 
             wait(1)
-            if not _SYS_LOCALPLAYER or not _SYS_LOCALPLAYER.Character then 
+            if not LocalPlayer or not LocalPlayer.Character then 
                 return false 
             end
         end
 
-        local char = _SYS_LOCALPLAYER.Character
+        local char = LocalPlayer.Character
         local hrp = char:FindFirstChild('HumanoidRootPart')
         local humanoid = char:FindFirstChild('Humanoid')
         if not hrp or not humanoid then 
@@ -826,7 +818,7 @@ local function initializeScript()
 
         if usePathfinding then
             task.spawn(function()
-                local path = _SYS_PATHFINDING:CreatePath({
+                local path = PathfindingService:CreatePath({
                     AgentRadius = 2, 
                     AgentHeight = 5, 
                     AgentCanJump = true
@@ -891,21 +883,21 @@ local function initializeScript()
         return result.success
     end
 
-    local function _RUN_LOBBY_ROUTINE()
-        if _AUTOFARM_STATE.Debounce or _SETTINGS_DATA.AutoFarmPaused then return end
-        if tick() - _AUTOFARM_STATE.LastAction < 1 then return end
-        _AUTOFARM_STATE.Debounce = true
-        _AUTOFARM_STATE.LastAction = tick()
+    local function RunLobbyRoutine()
+        if AutoState.Debounce or SETTINGS.AutoFarmPaused then return end
+        if tick() - AutoState.LastAction < 1 then return end
+        AutoState.Debounce = true
+        AutoState.LastAction = tick()
 
-        if not _SYS_WORKSPACE:FindFirstChild('Lobby') then 
-            _AUTOFARM_STATE.Debounce = false 
+        if not Workspace:FindFirstChild('Lobby') then 
+            AutoState.Debounce = false 
             return 
         end
 
-        local lobby = _SYS_WORKSPACE.Lobby
+        local lobby = Workspace.Lobby
         local lobbies = lobby:FindFirstChild('Lobbies')
         if not lobbies then 
-            _AUTOFARM_STATE.Debounce = false 
+            AutoState.Debounce = false 
             return 
         end
 
@@ -917,15 +909,15 @@ local function initializeScript()
         end
 
         if #touches == 0 then 
-            _AUTOFARM_STATE.Debounce = false 
+            AutoState.Debounce = false 
             return 
         end
 
         local chosen = touches[math.random(1,#touches)]
-        local usePath = _SETTINGS_DATA.AutofarmMode == 'Legit (Slow)'
+        local usePath = SETTINGS.AutofarmMode == 'Legit (Slow)'
 
-        if _MOVE_TO_POSITION(chosen.Position, usePath, 12) then
-            local hrp = _SYS_LOCALPLAYER.Character and _SYS_LOCALPLAYER.Character:FindFirstChild('HumanoidRootPart')
+        if MoveToPosition(chosen.Position, usePath, 12) then
+            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild('HumanoidRootPart')
             if hrp and (hrp.Position - chosen.Position).Magnitude < 10 then
                 if typeof(firetouchinterest) == 'function' then
                     firetouchinterest(hrp, chosen, 0); task.wait(0.08); firetouchinterest(hrp, chosen, 1)
@@ -933,27 +925,27 @@ local function initializeScript()
             end
             task.wait(0.5)
 
-            if _SYS_REPLICATEDSTORAGE:FindFirstChild('Events') and _SYS_REPLICATEDSTORAGE.Events:FindFirstChild('CreateParty') then
+            if ReplicatedStorage:FindFirstChild('Events') and ReplicatedStorage.Events:FindFirstChild('CreateParty') then
                 pcall(function()
-                    _SYS_REPLICATEDSTORAGE.Events.CreateParty:FireServer(1, _SETTINGS_DATA.SelectedMap, 'Anyone')
+                    ReplicatedStorage.Events.CreateParty:FireServer(1, SETTINGS.SelectedMap, 'Anyone')
                 end)
             end
         end
 
-        _AUTOFARM_STATE.Debounce = false
+        AutoState.Debounce = false
     end
 
-    local function _RUN_AUTOFARM_ONCE()
-        if _AUTOFARM_STATE.Debounce or _SETTINGS_DATA.AutoFarmPaused then return end
-        if tick() - _AUTOFARM_STATE.LastAction < 1 then return end
+    local function RunAutoFarmOnce()
+        if AutoState.Debounce or SETTINGS.AutoFarmPaused then return end
+        if tick() - AutoState.LastAction < 1 then return end
 
-        _AUTOFARM_STATE.Debounce = true
-        _AUTOFARM_STATE.LastAction = tick()
+        AutoState.Debounce = true
+        AutoState.LastAction = tick()
 
-        local mapFolder = _SYS_WORKSPACE:FindFirstChild('Map')
+        local mapFolder = Workspace:FindFirstChild('Map')
         local currentMap = mapFolder and mapFolder:GetChildren()[1] or nil
         if not currentMap then 
-            _AUTOFARM_STATE.Debounce = false 
+            AutoState.Debounce = false 
             return 
         end
 
@@ -968,14 +960,14 @@ local function initializeScript()
         end
 
         if not exitObj then
-            _AUTOFARM_STATE.Debounce = false 
+            AutoState.Debounce = false 
             return 
         end
 
         local exitPrompt = exitObj:FindFirstChildOfClass('ProximityPrompt')
-        local usePath = _SETTINGS_DATA.AutofarmMode == 'Legit (Slow)'
+        local usePath = SETTINGS.AutofarmMode == 'Legit (Slow)'
 
-        if _MOVE_TO_POSITION(exitObj.Position, usePath, 15) then
+        if MoveToPosition(exitObj.Position, usePath, 15) then
             if exitPrompt and typeof(fireproximityprompt) == 'function' then
                 for i = 1, 3 do
                     fireproximityprompt(exitPrompt, 1, false)
@@ -987,54 +979,54 @@ local function initializeScript()
 
             local suspect = 'Unknown'
             pcall(function()
-                if _SYS_REPLICATEDSTORAGE:FindFirstChild('Values') and _SYS_REPLICATEDSTORAGE.Values:FindFirstChild('GuiltySuspect') then
-                    suspect = tostring(_SYS_REPLICATEDSTORAGE.Values.GuiltySuspect.Value or 'Unknown')
+                if ReplicatedStorage:FindFirstChild('Values') and ReplicatedStorage.Values:FindFirstChild('GuiltySuspect') then
+                    suspect = tostring(ReplicatedStorage.Values.GuiltySuspect.Value or 'Unknown')
                 end
             end)
 
             pcall(function()
-                if _SYS_REPLICATEDSTORAGE:FindFirstChild('Events') and _SYS_REPLICATEDSTORAGE.Events:FindFirstChild('AccuseSuspect') then
-                    _SYS_REPLICATEDSTORAGE.Events.AccuseSuspect:FireServer(suspect)
+                if ReplicatedStorage:FindFirstChild('Events') and ReplicatedStorage.Events:FindFirstChild('AccuseSuspect') then
+                    ReplicatedStorage.Events.AccuseSuspect:FireServer(suspect)
                 end
             end)
 
-            _AUTOFARM_STATE.RoundHandled = true
+            AutoState.RoundHandled = true
         end
 
-        _AUTOFARM_STATE.Debounce = false
+        AutoState.Debounce = false
     end
 
     task.spawn(function()
         while true do
-            if _SETTINGS_DATA.AutoFarmEnabled and not _SETTINGS_DATA.AutoFarmPaused and not _TASK_RUNNING then
-                _TASK_RUNNING = true
+            if SETTINGS.AutoFarmEnabled and not SETTINGS.AutoFarmPaused and not TaskRunning then
+                TaskRunning = true
 
                 pcall(function()
-                    local mapFolder = _SYS_WORKSPACE:FindFirstChild('Map')
+                    local mapFolder = Workspace:FindFirstChild('Map')
                     local currentMap = mapFolder and mapFolder:GetChildren()[1] or nil
 
-                    if currentMap and not _AUTOFARM_STATE.RoundHandled then
-                        _RUN_AUTOFARM_ONCE()
-                    elseif _SYS_WORKSPACE:FindFirstChild('Lobby') then
-                        _AUTOFARM_STATE.RoundHandled = false
-                        _RUN_LOBBY_ROUTINE()
+                    if currentMap and not AutoState.RoundHandled then
+                        RunAutoFarmOnce()
+                    elseif Workspace:FindFirstChild('Lobby') then
+                        AutoState.RoundHandled = false
+                        RunLobbyRoutine()
                     else
                         wait(2)
                     end
                 end)
 
-                _TASK_RUNNING = false
+                TaskRunning = false
             end
             wait(0.5)
         end
     end)
 
-    local _TARGET_SPEED = 16
-    local _CURRENT_SPEED = 16
-    local _LAST_HUMANOID_CHECK = 0
+    local targetSpeed = 16
+    local currentSpeed = 16
+    local lastHumanoidCheck = 0
 
-    local function _APPLY_TO_HUMANOID(speed)
-        local char = _SYS_LOCALPLAYER and _SYS_LOCALPLAYER.Character
+    local function applyToHumanoid(speed)
+        local char = LocalPlayer and LocalPlayer.Character
         if not char then return end
 
         local humanoid = char:FindFirstChild('Humanoid')
@@ -1043,61 +1035,61 @@ local function initializeScript()
         end
     end
 
-    _SYS_LOCALPLAYER.CharacterAdded:Connect(function(character)
+    LocalPlayer.CharacterAdded:Connect(function(character)
         wait(1)
-        if _SETTINGS_DATA.SpeedHackEnabled then
-            _APPLY_TO_HUMANOID(_CURRENT_SPEED)
+        if SETTINGS.SpeedHackEnabled then
+            applyToHumanoid(currentSpeed)
         end
     end)
 
-    _SYS_RUNSERVICE.Heartbeat:Connect(function(dt)
-        _FRAME_COUNTER = _FRAME_COUNTER + 1
+    RunService.Heartbeat:Connect(function(dt)
+        frameCount = frameCount + 1
         local currentTime = tick()
-        if currentTime - _LAST_FPS_UPDATE >= 1 then
-            _FPS_VALUE = math.floor(_FRAME_COUNTER / (currentTime - _LAST_FPS_UPDATE))
-            _FRAME_COUNTER = 0
-            _LAST_FPS_UPDATE = currentTime
+        if currentTime - lastFpsUpdate >= 1 then
+            FPS = math.floor(frameCount / (currentTime - lastFpsUpdate))
+            frameCount = 0
+            lastFpsUpdate = currentTime
         end
 
-        if tick() - _LAST_HUMANOID_CHECK > 2 then
-            if _SETTINGS_DATA.SpeedHackEnabled then
-                _APPLY_TO_HUMANOID(_CURRENT_SPEED)
+        if tick() - lastHumanoidCheck > 2 then
+            if SETTINGS.SpeedHackEnabled then
+                applyToHumanoid(currentSpeed)
             end
-            _LAST_HUMANOID_CHECK = tick()
+            lastHumanoidCheck = tick()
         end
 
-        if _SETTINGS_DATA.SpeedHackEnabled then
-            _TARGET_SPEED = _SETTINGS_DATA.SpeedValue or 16
+        if SETTINGS.SpeedHackEnabled then
+            targetSpeed = SETTINGS.SpeedValue or 16
         else
-            _TARGET_SPEED = 16
+            targetSpeed = 16
         end
 
-        _CURRENT_SPEED = _CURRENT_SPEED + (_TARGET_SPEED - _CURRENT_SPEED) * math.clamp(8 * dt, 0, 1)
-        _APPLY_TO_HUMANOID(_CURRENT_SPEED)
+        currentSpeed = currentSpeed + (targetSpeed - currentSpeed) * math.clamp(8 * dt, 0, 1)
+        applyToHumanoid(currentSpeed)
     end)
 
     task.spawn(function()
-        local _LAST_TIMER_UPDATE = 0
-        local _LAST_STATS_UPDATE = 0
+        local lastTimerUpdate = 0
+        local lastStatsUpdate = 0
 
         while true do
             pcall(function()
                 local currentTime = tick()
                 
-                if currentTime - _LAST_TIMER_UPDATE > 0.5 then
-                    local elapsed = currentTime - _START_TIME
+                if currentTime - lastTimerUpdate > 0.5 then
+                    local elapsed = currentTime - startTime
                     local h = math.floor(elapsed / 3600)
                     local m = math.floor((elapsed % 3600) / 60)
                     local s = math.floor(elapsed % 60)
-                    _UI_TIMER:SetDesc(string.format('%02d:%02d:%02d ⏱', h, m, s))
-                    _LAST_TIMER_UPDATE = currentTime
+                    TimerParagraph:SetDesc(string.format('%02d:%02d:%02d ⏱', h, m, s))
+                    lastTimerUpdate = currentTime
                 end
 
-                if currentTime - _LAST_STATS_UPDATE > 1 then
+                if currentTime - lastStatsUpdate > 1 then
                     local coinsAmount = "N/A"
                     
                     pcall(function()
-                        local playerGui = _SYS_LOCALPLAYER:FindFirstChild("PlayerGui")
+                        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
                         if playerGui then
                             local mainGui = playerGui:FindFirstChild("MainGui")
                             if mainGui then
@@ -1121,49 +1113,49 @@ local function initializeScript()
                         end
                     end)
                     
-                    _UI_COINS:SetDesc(coinsAmount .. ' 💰')
-                    _LAST_STATS_UPDATE = currentTime
+                    CoinsParagraph:SetDesc(coinsAmount .. ' 💰')
+                    lastStatsUpdate = currentTime
                 end
 
-                local inLobby = _SYS_WORKSPACE:FindFirstChild('Lobby') ~= nil
+                local inLobby = Workspace:FindFirstChild('Lobby') ~= nil
                 local queueText = inLobby and 'In Lobby 🏠' or 'In Game 🎮'
-                _UI_QUEUE:SetDesc(queueText)
+                QueueParagraph:SetDesc(queueText)
 
-                _UI_PERFORMANCE:SetDesc('FPS: ' .. tostring(_FPS_VALUE))
+                PerformanceParagraph:SetDesc('FPS: ' .. tostring(FPS))
 
                 local guilty = 'Unknown'
                 pcall(function()
-                    if _SYS_REPLICATEDSTORAGE:FindFirstChild('Values') and _SYS_REPLICATEDSTORAGE.Values:FindFirstChild('GuiltySuspect') then
-                        guilty = tostring(_SYS_REPLICATEDSTORAGE.Values.GuiltySuspect.Value or 'Unknown')
+                    if ReplicatedStorage:FindFirstChild('Values') and ReplicatedStorage.Values:FindFirstChild('GuiltySuspect') then
+                        guilty = tostring(ReplicatedStorage.Values.GuiltySuspect.Value or 'Unknown')
                     end
                 end)
-                _UI_GUILTY:SetDesc(guilty .. ' 🕵️')
+                GuiltyParagraph:SetDesc(guilty .. ' 🕵️')
 
                 local banRisk = 'Low'
-                if _SETTINGS_DATA.AutoFarmEnabled and _SETTINGS_DATA.AutofarmMode == 'Blatant (Fast)' then 
+                if SETTINGS.AutoFarmEnabled and SETTINGS.AutofarmMode == 'Blatant (Fast)' then 
                     banRisk = 'High'
-                elseif _SETTINGS_DATA.AutoFarmEnabled or _SETTINGS_DATA.SpeedHackEnabled then 
+                elseif SETTINGS.AutoFarmEnabled or SETTINGS.SpeedHackEnabled then 
                     banRisk = 'Medium' 
                 end
-                _UI_BANRISK:SetDesc(banRisk)
+                BanRiskParagraph:SetDesc(banRisk)
 
                 local autofarmStatus
-                if _SETTINGS_DATA.AutoFarmEnabled and not _SETTINGS_DATA.AutoFarmPaused then
+                if SETTINGS.AutoFarmEnabled and not SETTINGS.AutoFarmPaused then
                     autofarmStatus = '🟢Working'
-                elseif _SETTINGS_DATA.AutoFarmEnabled and _SETTINGS_DATA.AutoFarmPaused then
+                elseif SETTINGS.AutoFarmEnabled and SETTINGS.AutoFarmPaused then
                     autofarmStatus = '🟡Paused'
                 else
                     autofarmStatus = '🔴Disabled'
                 end
-                _UI_AUTOFARMSTATUS:SetDesc(autofarmStatus)
+                AutofarmStatusParagraph:SetDesc(autofarmStatus)
             end)
 
             wait(0.1)
         end
     end)
 
-    _SYS_WINDUI:Notify({
-        Title = _APP_NAME,
+    WindUI:Notify({
+        Title = NAME,
         Content = "System loaded successfully! 🌟",
         Duration = 4,
         Icon = "success",
