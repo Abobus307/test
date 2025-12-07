@@ -519,7 +519,7 @@ local function initializeScript()
 
     local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
-    local MAPS = {'Motel Room', 'Humble Abode', 'Bathroom', 'Moolah Manor', 'Gas Station', 'Abandoned Apartment'}
+    local MAPS = {'Motel Room', 'Humble Abode', 'Bathroom', 'Moolah Manor', 'Gas Station', 'Abandoned Apartment', "Santa's Workshop"}
     local NAME = "CoolMan2"
     local SETTINGS_FILE = "CoolMan2_Settings.json"
 
@@ -712,6 +712,7 @@ local function initializeScript()
     end
 
     local CoinsParagraph = StatisticsTab:Paragraph({ Title = 'Coins', Desc = 'Loading... 💰' })
+    local SnowflakesParagraph = StatisticsTab:Paragraph({ Title = 'Snowflakes', Desc = 'Loading... ❄️' })
 
     local TimerParagraph = AutofarmTab:Paragraph({ Title = 'Timer', Desc = '00:00:00 ⏱' })
     local GuiltyParagraph = AutofarmTab:Paragraph({ Title = 'Target', Desc = 'Unknown 🕵️' })
@@ -1087,6 +1088,7 @@ local function initializeScript()
 
                 if currentTime - lastStatsUpdate > 1 then
                     local coinsAmount = "N/A"
+                    local snowflakesAmount = "N/A"
                     
                     pcall(function()
                         local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
@@ -1106,6 +1108,24 @@ local function initializeScript()
                                                     coinsAmount = coinsAmountLabel.Text
                                                 end
                                             end
+                                            
+                                            local snowflakes = holder2:FindFirstChild("Snowflakes")
+                                            if snowflakes then
+                                                local snowflakesAmountLabel = snowflakes:FindFirstChild("Amount")
+                                                if snowflakesAmountLabel and snowflakesAmountLabel:IsA("TextLabel") then
+                                                    snowflakesAmount = snowflakesAmountLabel.Text
+                                                end
+                                            else
+                                                for _, child in pairs(holder2:GetChildren()) do
+                                                    if string.find(child.Name:lower(), "snow") or string.find(child.Name:lower(), "flake") then
+                                                        local amountLabel = child:FindFirstChild("Amount")
+                                                        if amountLabel and amountLabel:IsA("TextLabel") then
+                                                            snowflakesAmount = amountLabel.Text
+                                                            break
+                                                        end
+                                                    end
+                                                end
+                                            end
                                         end
                                     end
                                 end
@@ -1114,6 +1134,7 @@ local function initializeScript()
                     end)
                     
                     CoinsParagraph:SetDesc(coinsAmount .. ' 💰')
+                    SnowflakesParagraph:SetDesc(snowflakesAmount .. ' ❄️')
                     lastStatsUpdate = currentTime
                 end
 
